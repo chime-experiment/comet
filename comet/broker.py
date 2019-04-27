@@ -1,25 +1,19 @@
 """REST Server for CoMeT (the Dataset Broker)."""
-import logging
-import time
+import asyncio
 import datetime
 from bisect import bisect_left
-import signal
-import sys
-from threading import Thread, Lock, Condition
+from signal import signal, SIGINT
 
-from flask import Flask, jsonify, request
-from werkzeug.serving import make_server
+from sanic import Sanic
+from sanic.response import json
+from sanic.log import logger
 
 from . import __version__
 
-# This is how a log line will look like:
-LOG_FORMAT = '[%(asctime)s] %(name)s: %(message)s'
-LOG_LEVEL = logging.DEBUG
 WAIT_TIME = 40
 DEFAULT_PORT = 12050
 
-log = logging.getLogger("CoMeT")
-app = Flask(__name__)
+app = Sanic(__name__)
 
 
 def datetime_to_float(d):
@@ -70,18 +64,18 @@ datasets = dict()
 datasets_of_root = dict()
 datasets_of_root_keys = dict()
 
-lock_datasets = Lock()
-lock_states = Lock()
-signal_states_updated = Condition(lock_states)
-signal_datasets_updated = Condition(lock_datasets)
+lock_datasets = asyncio.Lock()
+lock_states = asyncio.Lock()
+signal_states_updated = asyncio.Condition(lock_states)
+signal_datasets_updated = asyncio.Condition(lock_datasets)
 
 # a set of requested states and its lock
 requested_states = set()
-lock_requested_states = Lock()
+lock_requested_states = asyncio.Lock()
 
 
 @app.route('/status', methods=['GET'])
-def status():
+async def status(request):
     """
     Get status of CoMeT (dataset-broker).
 
@@ -92,22 +86,22 @@ def status():
     global states
     global datasets
 
-    log.debug('status: Received status request')
+    logger.debug('status: Received status request')
 
     reply = dict()
-    with lock_states:
+    async with lock_states:
         reply["states"] = states.keys()
-    with lock_datasets:
+    async with lock_datasets:
         reply["datasets"] = datasets.keys()
 
-    log.debug('states: %r' % (states.keys()))
-    log.debug('datasets: %r' % (datasets.keys()))
+    logger.debug('states: %r' % (states.keys()))
+    logger.debug('datasets: %r' % (datasets.keys()))
 
-    return jsonify(reply)
+    return json(reply)
 
 
 @app.route('/register-state', methods=['POST'])
-def registerState():
+async def registerState(request):
     """Register a dataset state with CoMeT (the broker).
 
     This should only ever be called by kotekan's datasetManager.
@@ -115,28 +109,28 @@ def registerState():
     global states
     global requested_states
 
-    hash = request.get_json(force=True)['hash']
-    log.debug('register-state: Received register state request, hash: %r' % (hash))
+    hash = request.json['hash']
+    logger.debug('register-state: Received register state request, hash: {:x}'.format(hash))
     reply = dict(result="success")
 
-    with lock_states:
+    async with lock_states:
         if states.get(hash) is None:
             # we don't know this state, did we request it already?
-            with lock_requested_states:
+            async with lock_requested_states:
                 if hash in requested_states:
-                    return jsonify(reply)
+                    return json(reply)
 
             # ask for it
-            with lock_requested_states:
+            async with lock_requested_states:
                 requested_states.add(hash)
             reply['request'] = "get_state"
             reply['hash'] = hash
-            log.debug('register-state: Asking for state, hash: %r' % (hash))
-    return jsonify(reply)
+            logger.debug('register-state: Asking for state, hash: {:x}'.format(hash))
+    return json(reply)
 
 
 @app.route('/send-state', methods=['POST'])
-def sendState():
+async def sendState(request):
     """Send a dataset state to CoMeT (the broker).
 
     This should only ever be called by kotekan's datasetManager.
@@ -144,22 +138,22 @@ def sendState():
     global states
     global requested_states
 
-    hash = request.get_json(force=True)['hash']
-    state = request.get_json(force=True)['state']
-    log.debug('send-state: Received state %r' % (hash))
+    hash = request.json['hash']
+    state = request.json['state']
+    logger.debug('send-state: Received state %r' % (hash))
     reply = dict()
 
     # do we have this state already?
-    with lock_states:
+    async with lock_states:
         found = states.get(hash)
         if found is not None:
             # if we know it already, does it differ?
             if found != state:
                 reply['result'] = "error: a different state is know to " \
                                   "the broker with this hash: %r" % found
-                log.warning('send-state: Failure receiving state: a '
-                            'different state with the same hash is: %r'
-                            % (found))
+                logger.warning('send-state: Failure receiving state: a '
+                               'different state with the same hash is: %r'
+                               % (found))
             else:
                 reply['result'] = "success"
         else:
@@ -167,37 +161,37 @@ def sendState():
             reply['result'] = "success"
             signal_states_updated.notify_all()
 
-    with lock_requested_states:
+    async with lock_requested_states:
         requested_states.remove(hash)
 
-    return jsonify(reply)
+    return json(reply)
 
 
 @app.route('/register-dataset', methods=['POST'])
-def registerDataset():
+async def registerDataset(request):
     """Register a dataset with CoMeT (the broker).
 
     This should only ever be called by kotekan's datasetManager.
     """
     global datasets
 
-    hash = request.get_json(force=True)['hash']
-    ds = request.get_json(force=True)['ds']
-    log.debug('register-dataset: Registering new dataset with hash %r : %r' % (hash, ds))
-    dataset_valid = checkDataset(ds)
+    hash = request.json['hash']
+    ds = request.json['ds']
+    logger.debug('register-dataset: Registering new dataset with hash %r : %r' % (hash, ds))
+    dataset_valid = await checkDataset(ds)
     reply = dict()
-    root = findRoot(hash, ds)
+    root = await findRoot(hash, ds)
 
     # dataset already known?
-    with lock_datasets:
+    async with lock_datasets:
         found = datasets.get(hash)
         if found is not None:
             # if we know it already, does it differ?
             if found != ds:
                 reply['result'] = "error: a different dataset is know to" \
                                   " the broker with this hash: %r" % found
-                log.warning('register-dataset: Failure receiving dataset: a'
-                            ' different dataset with the same hash is: %r' % (found))
+                logger.warning('register-dataset: Failure receiving dataset: a'
+                               ' different dataset with the same hash is: %r' % (found))
             else:
                 reply['result'] = "success"
         elif dataset_valid:
@@ -208,10 +202,10 @@ def registerDataset():
             signal_datasets_updated.notify_all()
         else:
             reply['result'] = 'Dataset {} invalid.'.format(hash)
-            log.debug(
+            logger.debug(
                 'register-dataset: Received invalid dataset with hash %r : %r' %
                 (hash, ds))
-        return jsonify(reply)
+        return json(reply)
 
 
 def saveDataset(hash, ds, root):
@@ -240,7 +234,7 @@ def saveDataset(hash, ds, root):
     datasets[hash] = ds
 
 
-def gatherUpdate(ts, roots):
+async def gatherUpdate(ts, roots):
     """Gather the update for a given time and roots.
 
     Returns a dict of dataset ID -> dataset with all datasets with the
@@ -248,7 +242,7 @@ def gatherUpdate(ts, roots):
     """
     update = dict()
 
-    with lock_datasets:
+    async with lock_datasets:
         for r in roots:
             tree = reversed(datasets_of_root[r])
             keys = reversed(datasets_of_root_keys[r])
@@ -263,44 +257,44 @@ def gatherUpdate(ts, roots):
     return update
 
 
-def findRoot(hash, ds):
+async def findRoot(hash, ds):
     """Return the dataset Id of the root of this dataset."""
     root = hash
     while not ds['is_root']:
         root = ds['base_dset']
-        found = wait_for_dset(root)
+        found = await wait_for_dset(root)
         if not found:
-            log.error('findRoot: dataset %r not found.', hash)
+            logger.error('findRoot: dataset %r not found.', hash)
             return None
-        with lock_datasets:
+        async with lock_datasets:
             ds = datasets[root]
     return root
 
 
-def checkDataset(ds):
+async def checkDataset(ds):
     """Check if a dataset is valid.
 
     For a dataset to be valid, the state and base dataset it references to
     have to exist. If it is a root dataset, the base dataset does not have
     to exist.
     """
-    log.debug('checkDataset: Checking dataset: %r' % (ds))
-    found = wait_for_state(ds['state'])
+    logger.debug('checkDataset: Checking dataset: %r' % (ds))
+    found = await wait_for_state(ds['state'])
     if not found:
-        log.debug('checkDataset: State of dataset unknown: %r' % (ds))
+        logger.debug('checkDataset: State of dataset unknown: %r' % (ds))
         return False
     if ds['is_root']:
-        log.debug('checkDataset: dataset %r OK' % (ds))
+        logger.debug('checkDataset: dataset %r OK' % (ds))
         return True
-    found = wait_for_dset(ds['base_dset'])
+    found = await wait_for_dset(ds['base_dset'])
     if not found:
-        log.debug('checkDataset: Base dataset of dataset unknown: %r' % (ds))
+        logger.debug('checkDataset: Base dataset of dataset unknown: %r' % (ds))
         return False
     return True
 
 
 @app.route('/request-state', methods=['POST'])
-def requestState():
+async def requestState(request):
     """Request the state with the given ID.
 
     This is called by kotekan's datasetManager.
@@ -309,95 +303,108 @@ def requestState():
          http://localhost:12050/request-state
     """
     global states
-    id = request.get_json(force=True)['id']
+    id = request.json['id']
 
-    log.debug('request-state: Received request for state with ID %r' % (id))
+    logger.debug('request-state: Received request for state with ID %r' % (id))
     reply = dict()
     reply['id'] = id
 
     # Do we know this state ID?
-    log.debug('request-state: waiting for state ID %r' % (id))
-    found = wait_for_state(id)
+    logger.debug('request-state: waiting for state ID %r' % (id))
+    found = await wait_for_state(id)
     if not found:
         reply['result'] = "state ID %r unknown to broker." % id
-        log.info('request-state: State %r unknown to broker' % (id))
-        return jsonify(reply)
-    log.debug('request-state: found state ID %r' % (id))
+        logger.info('request-state: State %r unknown to broker' % (id))
+        return json(reply)
+    logger.debug('request-state: found state ID %r' % (id))
 
-    with lock_states:
+    async with lock_states:
         reply['state'] = states[id]
 
     reply['result'] = "success"
-    log.debug('request-state: Replying with state %r' % (id))
-    return jsonify(reply)
+    logger.debug('request-state: Replying with state %r' % (id))
+    return json(reply)
 
 
-def wait_for_dset(id):
+async def wait_for_dset(id):
     """Wait until the given dataset is present."""
     global datasets
 
     found = True
-    lock_datasets.acquire()
+    await lock_datasets.acquire()
 
     if datasets.get(id) is None:
         # wait for half of kotekans timeout before we admit we don't have it
         lock_datasets.release()
-        log.debug('wait_for_ds: Waiting for dataset %r' % (id))
+        logger.debug('wait_for_ds: Waiting for dataset %r' % (id))
         while True:
             # did someone send it to us by now?
-            with lock_datasets:
-                if not signal_datasets_updated.wait(WAIT_TIME):
-                    log.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r'
-                                % (WAIT_TIME, id))
+            async with lock_datasets:
+                try:
+                    await asyncio.wait_for(signal_datasets_updated.wait(), WAIT_TIME)
+                except TimeoutError:
+                    logger.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r'
+                                   % (WAIT_TIME, id))
                     return False
                 if datasets.get(id) is not None:
-                    log.debug(
+                    logger.debug(
                         'wait_for_ds: Found dataset %r' % (id))
                     break
 
-        lock_datasets.acquire()
-        if datasets.get(id) is None:
-            log.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r' % (WAIT_TIME, id))
-            found = False
-    lock_datasets.release()
+        await lock_datasets.acquire()
+        try:
+            if datasets.get(id) is None:
+                logger.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r'
+                               % (WAIT_TIME, id))
+                found = False
+        finally:
+            lock_datasets.release()
+    else:
+        lock_datasets.release()
 
     return found
 
 
-def wait_for_state(id):
+async def wait_for_state(id):
     """Wait until the given state is present."""
     global states
 
     found = True
-    lock_states.acquire()
+    await lock_states.acquire()
     if states.get(id) is None:
         # wait for half of kotekans timeout before we admit we don't have it
         lock_states.release()
-        log.debug('wait_for_state: Waiting for state %r' % (id))
+        logger.debug('wait_for_state: Waiting for state %r' % (id))
         while True:
             # did someone send it to us by now?
-            with lock_states:
-                if not signal_states_updated.wait(WAIT_TIME):
-                    log.warning('wait_for_state: Timeout (%rs) when waiting for state %r'
-                                % (WAIT_TIME, id))
+            async with lock_states:
+                try:
+                    await asyncio.wait_for(signal_states_updated.wait(), WAIT_TIME)
+                except TimeoutError:
+                    logger.warning('wait_for_ds: Timeout (%rs) when waiting for state %r'
+                                   % (WAIT_TIME, id))
                     return False
                 if states.get(id) is not None:
-                    log.debug(
-                        'wait_for_state: Got state %r' % (id))
+                    logger.debug(
+                        'wait_for_ds: Found state %r' % (id))
                     break
 
-        lock_states.acquire()
-        if states.get(id) is None:
-            log.warning('wait_for_state: Timeout (%rs) when waiting for state %r'
-                        % (WAIT_TIME, id))
-            found = False
-    lock_states.release()
+        await lock_states.acquire()
+        try:
+            if states.get(id) is None:
+                logger.warning('wait_for_state: Timeout (%rs) when waiting for state %r'
+                               % (WAIT_TIME, id))
+                found = False
+        finally:
+            lock_states.release()
+    else:
+        lock_states.release()
 
     return found
 
 
 @app.route('/update-datasets', methods=['POST'])
-def updateDatasets():
+async def updateDatasets(request):
     """Get an update on the datasets.
 
     Request all nodes that where added after the given timestamp.
@@ -414,88 +421,69 @@ def updateDatasets():
     http://localhost:12050/update-datasets
     """
     global datasets
-    ds_id = request.get_json(force=True)['ds_id']
-    ts = request.get_json(force=True)['ts']
-    roots = request.get_json(force=True)['roots']
+    ds_id = request.json['ds_id']
+    ts = request.json['ts']
+    roots = request.json['roots']
 
-    log.debug('update-datasets: Received request for ancestors of dataset %r '
-              'since timestamp %r, roots %r.' % (ds_id, ts, roots))
+    logger.debug('update-datasets: Received request for ancestors of dataset %r '
+                 'since timestamp %r, roots %r.' % (ds_id, ts, roots))
     reply = dict()
     reply['datasets'] = dict()
 
     # Do we know this ds ID?
-    found = wait_for_dset(ds_id)
+    found = await wait_for_dset(ds_id)
     if not found:
         reply['result'] = "update-datasets: Dataset ID %r unknown to broker." % ds_id
-        log.info('update-datasets: Dataset ID %r unknown.' % (ds_id))
-        return jsonify(reply)
+        logger.info('update-datasets: Dataset ID %r unknown.' % (ds_id))
+        return json(reply)
 
     if ts is 0:
         ts = datetime_to_float(datetime.datetime.min)
 
     # If the requested dataset is from a tree not known to the calling
     # instance, send them that whole tree.
-    root = findRoot(ds_id, datasets[ds_id])
+    root = await findRoot(ds_id, datasets[ds_id])
     if root is None:
-        log.error('update-datasets: Root of dataset %r not found.', ds_id)
+        logger.error('update-datasets: Root of dataset %r not found.', ds_id)
         reply['result'] = 'Root of dataset %r not found.' % ds_id
     if root not in roots:
-        reply['datasets'] = tree(root)
+        reply['datasets'] = await tree(root)
 
     # add a timestamp to the result before gathering update
     reply['ts'] = datetime_to_float(datetime.datetime.utcnow())
-    reply['datasets'].update(gatherUpdate(ts, roots))
+    reply['datasets'].update(await gatherUpdate(ts, roots))
 
     reply['result'] = "success"
-    log.debug('update-datasets: Answering with %r.' % (reply))
-    return jsonify(reply)
+    logger.debug('update-datasets: Answering with %r.' % (reply))
+    return json(reply)
 
 
-def tree(root):
+async def tree(root):
     """Return a list of all nodes in the given tree."""
     tree = dict()
-    with lock_datasets:
+    async with lock_datasets:
         for n in datasets_of_root[root]:
             tree[n] = datasets[n]
     return tree
 
 
-class ServerThread(Thread):
-    """REST interface for Dataset Broker."""
-
-    def __init__(self, app, address='0.0.0.0', port=DEFAULT_PORT):
-        log.info("Starting CoMeT dataset_broker({}) using port {}.".format(__version__, port))
-
-        Thread.__init__(self)
-        self.srv = make_server(address, port, app, threaded=True)
-        self.ctx = app.app_context()
-        self.ctx.push()
-
-    def run(self):
-        """Run the server."""
-        self.srv.serve_forever()
-
-    def shutdown(self):
-        """Shut down the server."""
-        self.srv.shutdown()
-
-
 class Broker():
     """Main class to run the comet dataset broker."""
 
-    def __init__(self):
-        signal.signal(signal.SIGINT, self.signal_handler)
-        logging.basicConfig(format=LOG_FORMAT)
-        log.setLevel(LOG_LEVEL)
-        self.server = ServerThread(app)
+    def __init__(self, debug):
+        self.debug = debug
 
     def run(self):
         """Run comet dataset broker."""
-        self.server.start()
-        while True:
-            time.sleep(5)
-
-    def signal_handler(self, sig, frame):
-        """Shut down the server."""
-        self.server.shutdown()
-        sys.exit(0)
+        print("Starting CoMeT dataset_broker({}) using port {}."
+              .format(__version__, DEFAULT_PORT))
+        server = app.create_server(host="0.0.0.0", port=12050, return_asyncio_server=True,
+                                   access_log=True, debug=self.debug)
+        loop = asyncio.get_event_loop()
+        task = asyncio.ensure_future(server)
+        signal(SIGINT, lambda s, f: loop.stop())
+        try:
+            loop.run_forever()
+        except BaseException:
+            loop.stop()
+            raise
