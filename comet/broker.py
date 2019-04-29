@@ -94,8 +94,8 @@ async def status(request):
     async with lock_datasets:
         reply["datasets"] = datasets.keys()
 
-    logger.debug('states: %r' % (states.keys()))
-    logger.debug('datasets: %r' % (datasets.keys()))
+    logger.debug('states: {}'.format(states.keys()))
+    logger.debug('datasets: {}'.format(datasets.keys()))
 
     return json(reply)
 
@@ -110,7 +110,7 @@ async def registerState(request):
     global requested_states
 
     hash = request.json['hash']
-    logger.debug('register-state: Received register state request, hash: {:x}'.format(hash))
+    logger.debug('register-state: Received register state request, hash: {}'.format(hash))
     reply = dict(result="success")
 
     async with lock_states:
@@ -125,7 +125,7 @@ async def registerState(request):
                 requested_states.add(hash)
             reply['request'] = "get_state"
             reply['hash'] = hash
-            logger.debug('register-state: Asking for state, hash: {:x}'.format(hash))
+            logger.debug('register-state: Asking for state, hash: {}'.format(hash))
     return json(reply)
 
 
@@ -140,7 +140,7 @@ async def sendState(request):
 
     hash = request.json['hash']
     state = request.json['state']
-    logger.debug('send-state: Received state %r' % (hash))
+    logger.debug('send-state: Received state {}'.format(hash))
     reply = dict()
 
     # do we have this state already?
@@ -150,10 +150,9 @@ async def sendState(request):
             # if we know it already, does it differ?
             if found != state:
                 reply['result'] = "error: a different state is know to " \
-                                  "the broker with this hash: %r" % found
-                logger.warning('send-state: Failure receiving state: a '
-                               'different state with the same hash is: %r'
-                               % (found))
+                                  "the broker with this hash: {}".format(found)
+                logger.warning('send-state: Failure receiving state: a different state with the '
+                               'same hash is: {}'.format(found))
             else:
                 reply['result'] = "success"
         else:
@@ -177,7 +176,7 @@ async def registerDataset(request):
 
     hash = request.json['hash']
     ds = request.json['ds']
-    logger.debug('register-dataset: Registering new dataset with hash %r : %r' % (hash, ds))
+    logger.debug('register-dataset: Registering new dataset with hash {} : {}'.format(hash, ds))
     dataset_valid = await checkDataset(ds)
     reply = dict()
     root = await findRoot(hash, ds)
@@ -189,9 +188,9 @@ async def registerDataset(request):
             # if we know it already, does it differ?
             if found != ds:
                 reply['result'] = "error: a different dataset is know to" \
-                                  " the broker with this hash: %r" % found
-                logger.warning('register-dataset: Failure receiving dataset: a'
-                               ' different dataset with the same hash is: %r' % (found))
+                                  " the broker with this hash: {}".format(found)
+                logger.warning('register-dataset: Failure receiving dataset: a different dataset'
+                               ' with the same hash is: {}'.format(found))
             else:
                 reply['result'] = "success"
         elif dataset_valid:
@@ -202,9 +201,8 @@ async def registerDataset(request):
             signal_datasets_updated.notify_all()
         else:
             reply['result'] = 'Dataset {} invalid.'.format(hash)
-            logger.debug(
-                'register-dataset: Received invalid dataset with hash %r : %r' %
-                (hash, ds))
+            logger.debug('register-dataset: Received invalid dataset with hash {} : {}'
+                         .format(hash, ds))
         return json(reply)
 
 
@@ -264,7 +262,7 @@ async def findRoot(hash, ds):
         root = ds['base_dset']
         found = await wait_for_dset(root)
         if not found:
-            logger.error('findRoot: dataset %r not found.', hash)
+            logger.error('findRoot: dataset {} not found.'.format(hash))
             return None
         async with lock_datasets:
             ds = datasets[root]
@@ -278,17 +276,17 @@ async def checkDataset(ds):
     have to exist. If it is a root dataset, the base dataset does not have
     to exist.
     """
-    logger.debug('checkDataset: Checking dataset: %r' % (ds))
+    logger.debug('checkDataset: Checking dataset: {}'.format(ds))
     found = await wait_for_state(ds['state'])
     if not found:
-        logger.debug('checkDataset: State of dataset unknown: %r' % (ds))
+        logger.debug('checkDataset: State of dataset unknown: {}'.format(ds))
         return False
     if ds['is_root']:
-        logger.debug('checkDataset: dataset %r OK' % (ds))
+        logger.debug('checkDataset: dataset {} OK'.format(ds))
         return True
     found = await wait_for_dset(ds['base_dset'])
     if not found:
-        logger.debug('checkDataset: Base dataset of dataset unknown: %r' % (ds))
+        logger.debug('checkDataset: Base dataset of dataset unknown: {}'.format(ds))
         return False
     return True
 
@@ -305,24 +303,24 @@ async def requestState(request):
     global states
     id = request.json['id']
 
-    logger.debug('request-state: Received request for state with ID %r' % (id))
+    logger.debug('request-state: Received request for state with ID {}'.format(id))
     reply = dict()
     reply['id'] = id
 
     # Do we know this state ID?
-    logger.debug('request-state: waiting for state ID %r' % (id))
+    logger.debug('request-state: waiting for state ID {}'.format(id))
     found = await wait_for_state(id)
     if not found:
-        reply['result'] = "state ID %r unknown to broker." % id
-        logger.info('request-state: State %r unknown to broker' % (id))
+        reply['result'] = "state ID {} unknown to broker.".format(id)
+        logger.info('request-state: State {} unknown to broker'.format(id))
         return json(reply)
-    logger.debug('request-state: found state ID %r' % (id))
+    logger.debug('request-state: found state ID {}'.format(id))
 
     async with lock_states:
         reply['state'] = states[id]
 
     reply['result'] = "success"
-    logger.debug('request-state: Replying with state %r' % (id))
+    logger.debug('request-state: Replying with state {}'.format(id))
     return json(reply)
 
 
@@ -336,26 +334,25 @@ async def wait_for_dset(id):
     if datasets.get(id) is None:
         # wait for half of kotekans timeout before we admit we don't have it
         lock_datasets.release()
-        logger.debug('wait_for_ds: Waiting for dataset %r' % (id))
+        logger.debug('wait_for_ds: Waiting for dataset {}'.format(id))
         while True:
             # did someone send it to us by now?
             async with lock_datasets:
                 try:
                     await asyncio.wait_for(signal_datasets_updated.wait(), WAIT_TIME)
                 except TimeoutError:
-                    logger.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r'
-                                   % (WAIT_TIME, id))
+                    logger.warning('wait_for_ds: Timeout ({}s) when waiting for dataset {}'
+                                   .format(WAIT_TIME, id))
                     return False
                 if datasets.get(id) is not None:
-                    logger.debug(
-                        'wait_for_ds: Found dataset %r' % (id))
+                    logger.debug('wait_for_ds: Found dataset {}'.format(id))
                     break
 
         await lock_datasets.acquire()
         try:
             if datasets.get(id) is None:
-                logger.warning('wait_for_ds: Timeout (%rs) when waiting for dataset %r'
-                               % (WAIT_TIME, id))
+                logger.warning('wait_for_ds: Timeout ({}s) when waiting for dataset {}'
+                               .format(WAIT_TIME, id))
                 found = False
         finally:
             lock_datasets.release()
@@ -374,26 +371,25 @@ async def wait_for_state(id):
     if states.get(id) is None:
         # wait for half of kotekans timeout before we admit we don't have it
         lock_states.release()
-        logger.debug('wait_for_state: Waiting for state %r' % (id))
+        logger.debug('wait_for_state: Waiting for state {}'.format(id))
         while True:
             # did someone send it to us by now?
             async with lock_states:
                 try:
                     await asyncio.wait_for(signal_states_updated.wait(), WAIT_TIME)
                 except TimeoutError:
-                    logger.warning('wait_for_ds: Timeout (%rs) when waiting for state %r'
-                                   % (WAIT_TIME, id))
+                    logger.warning('wait_for_ds: Timeout ({}s) when waiting for state {}'
+                                   .format(WAIT_TIME, id))
                     return False
                 if states.get(id) is not None:
-                    logger.debug(
-                        'wait_for_ds: Found state %r' % (id))
+                    logger.debug('wait_for_ds: Found state {}'.format(id))
                     break
 
         await lock_states.acquire()
         try:
             if states.get(id) is None:
-                logger.warning('wait_for_state: Timeout (%rs) when waiting for state %r'
-                               % (WAIT_TIME, id))
+                logger.warning('wait_for_state: Timeout ({}s) when waiting for state {}'
+                               .format(WAIT_TIME, id))
                 found = False
         finally:
             lock_states.release()
@@ -425,16 +421,16 @@ async def updateDatasets(request):
     ts = request.json['ts']
     roots = request.json['roots']
 
-    logger.debug('update-datasets: Received request for ancestors of dataset %r '
-                 'since timestamp %r, roots %r.' % (ds_id, ts, roots))
+    logger.debug('update-datasets: Received request for ancestors of dataset {} since timestamp '
+                 '{}, roots {}.'.format(ds_id, ts, roots))
     reply = dict()
     reply['datasets'] = dict()
 
     # Do we know this ds ID?
     found = await wait_for_dset(ds_id)
     if not found:
-        reply['result'] = "update-datasets: Dataset ID %r unknown to broker." % ds_id
-        logger.info('update-datasets: Dataset ID %r unknown.' % (ds_id))
+        reply['result'] = "update-datasets: Dataset ID {} unknown to broker.".format(ds_id)
+        logger.info('update-datasets: Dataset ID {} unknown.'.format(ds_id))
         return json(reply)
 
     if ts is 0:
@@ -444,8 +440,8 @@ async def updateDatasets(request):
     # instance, send them that whole tree.
     root = await findRoot(ds_id, datasets[ds_id])
     if root is None:
-        logger.error('update-datasets: Root of dataset %r not found.', ds_id)
-        reply['result'] = 'Root of dataset %r not found.' % ds_id
+        logger.error('update-datasets: Root of dataset {} not found.'.format(ds_id))
+        reply['result'] = 'Root of dataset {} not found.'.format(ds_id)
     if root not in roots:
         reply['datasets'] = await tree(root)
 
@@ -454,7 +450,7 @@ async def updateDatasets(request):
     reply['datasets'].update(await gatherUpdate(ts, roots))
 
     reply['result'] = "success"
-    logger.debug('update-datasets: Answering with %r.' % (reply))
+    logger.debug('update-datasets: Answering with {}.'.format(reply))
     return json(reply)
 
 
