@@ -26,31 +26,6 @@ class BrokerError(BaseException):
     pass
 
 
-class Tree(object):
-    """
-    Dataset tree node.
-
-    Used to keep track of the dataset hirarchy.
-    """
-
-    def __init__(self, dataset, parent=None):
-        self.data = dataset
-        self.children = []
-        self.parent = parent
-
-    def _add_child(self, node):
-        """
-        Add a child to this node.
-
-        Parameters
-        ----------
-        node : :class:`Tree`
-        """
-        assert isinstance(node, Tree)
-        self.children.append(node)
-        node.parent = self
-
-
 class Manager:
     """
     CoMeT dataset manager.
@@ -75,15 +50,10 @@ class Manager:
         """
         self.broker = 'http://{}:{}'.format(host, port)
         self.noconfig = noconfig
-        self.root_dataset = None
         self.config = None
         self.states = dict()
-        self.datasets = dict()
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
-        self.last_state = dict()
-        self.simple = True
-        self.last_simple = None
 
     def register_config(self, config):
         """Register a static config with the broker.
@@ -158,101 +128,6 @@ class Manager:
     def _make_hash(data):
         return hash(json.dumps(data, sort_keys=True))
 
-    def register_state(self, state_type, state, parent_dataset=None):
-        """Register a new state with the broker.
-
-        If the state changes, you should call this function again, passing the same type and the
-        new state. For static configs that don't change, use :function:`register_config`.
-
-        If you have a single-lined dataset hirarchy, ignore the `parent_dataset` option. If you
-        you have differing states that come from the same parent dataset, sharing a common state,
-        you have to keep track of the dataset IDs.
-
-        Parameters
-        ----------
-        state_type : str
-            The name of the type of state to register.
-        state : dict
-            The state to register.
-        parent_dataset: int
-            If this is not `None`, this is the parent dataset, the new dataset with the given state
-            is based on. Default: `None`.
-
-        Raises
-        ------
-        :class:`ManagerError`
-            If there was an internal error in dataset management. For example if a state was
-            registered before the static config without initializing the manager with
-            `noconfig=True`.
-        :class:`BrokerError`
-            If there was an error in registering stuff with the broker.
-        :class:`ConnectionError`
-            If the broker can't be reached.
-        """
-        if state is None:
-            raise ManagerError('The config can not be `None`.')
-        if self.root_dataset is None and self.noconfig is False:
-            raise ManagerError('Config needs to be registered before any state is added.')
-        if parent_dataset:
-            self.simple = False
-            try:
-                parent_tree_node = self.datasets[parent_dataset]
-            except KeyError:
-                raise ManagerError('parent_dataset {} unknown.'.format(parent_dataset))
-            if parent_tree_node is None:
-                raise ManagerError('Unknown parent_dataset of state_type `{}`: {}'
-                                   .format(state_type, parent_dataset))
-        if not self.simple and parent_dataset is None:
-            raise ManagerError('No parent_dataset given, but the dataset topology is not simple.')
-        state_id = self._make_hash(state)
-
-        self.logger.info('Registering {} state with hash {}.'.format(state_type, state_id))
-        request = {'hash': state_id}
-        r = requests.post(self.broker + REGISTER_STATE, data=json.dumps(request))
-        r.raise_for_status()
-        r = r.json()
-        self._check_result(r.get('result'), REGISTER_STATE)
-
-        # Does the broker ask for the state?
-        if r.get('request') == 'get_state':
-            if r.get('hash') != state_id:
-                raise BrokerError('The broker is asking for state {} when state {} was registered.'
-                                  .format(r.get('hash'), state_id))
-            self._send_state(state_id, state)
-
-        self.states[state_id] = state
-        self.last_state[state_type] = state
-
-        # Is this a root dataset?
-        if self.noconfig and not self.datasets:
-            self.logger.debug('Registering {} state {} with the root dataset.'
-                              .format(state_type, state_id))
-            is_root = True
-        else:
-            is_root = False
-
-            # Find parent dataset
-            if parent_dataset is None:
-                parent_tree_node = self.last_simple
-
-        ds = {'state': state_id, 'is_root': is_root, 'base_dset': parent_tree_node.data['hash']}
-        ds_id = self._make_hash(ds)
-        request = {'hash': ds_id, 'ds': ds}
-        r = requests.post(self.broker + REGISTER_DATASET, data=json.dumps(request))
-        r.raise_for_status()
-        self._check_result(r.json().get('result'), REGISTER_DATASET)
-
-        ds['hash'] = ds_id
-        ds['type'] = state_type
-        new_tree_node = Tree(ds)
-        if is_root:
-            self.root_dataset = new_tree_node
-        else:
-            parent_tree_node._add_child(new_tree_node)
-        self.last_simple = new_tree_node
-        self.datasets[ds_id] = new_tree_node
-        return ds_id
-
     def get_state(self, type=None, dataset_id=None):
         """
         Get the static config or the dataset state that was added last.
@@ -283,21 +158,6 @@ class Manager:
             requested state not found.
         """
         if type is None:
-            return self.states[self.root_dataset.data['state']]
+            return self.states[self.config]
 
-        if dataset_id is None:
-            if not self.simple:
-                raise ManagerError('No dataset_id given, when the dataset hirarchy has multiple'
-                                   ' branches.')
-            return self.last_state[type]
-
-        # Walk up the tree to find the last dataset with the state of requested type.
-        try:
-            node = self.datasets[dataset_id]
-        except KeyError:
-            raise ManagerError('Dataset {} unknown.'.format(dataset_id))
-        while node.data['type'] != type:
-            if node.parent is None:
-                return None
-            node = node.parent
-        return self.states[node.data['state']]
+        raise ManagerError('get_state: Not implemented for anything but initial config.')
