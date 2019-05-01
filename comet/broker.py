@@ -73,6 +73,11 @@ signal_datasets_updated = asyncio.Condition(lock_datasets)
 requested_states = set()
 lock_requested_states = asyncio.Lock()
 
+# external state:
+# This is a state that consists of smaller external states that are not attached to any dataset.
+external_state = dict()
+lock_external_state = asyncio.Lock()
+
 
 @app.route('/status', methods=['GET'])
 async def status(request):
@@ -98,6 +103,26 @@ async def status(request):
     logger.debug('datasets: {}'.format(datasets.keys()))
 
     return json(reply)
+
+
+@app.route('/register-external-state', methods=['POST'])
+async def externalState(request):
+    """Register an external state that should is detached from any dataset."""
+    global external_state
+
+    hash = request.json['hash']
+    type = request.json['type']
+    logger.debug('Received external state: {} with hash {}'.format(type, hash))
+
+    state = {type: hash}
+
+    async with lock_external_state:
+        external_state.update(state)
+
+    # TODO: tell kotekan that this happened
+
+    result = await registerState(request)
+    return result
 
 
 @app.route('/register-state', methods=['POST'])
