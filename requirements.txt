@@ -1,2 +1,2 @@
-sanic
+sanic ; python_version >= '3.6'
 requests
