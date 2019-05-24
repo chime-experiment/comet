@@ -128,11 +128,13 @@ async def externalState(request):
     state = {type: hash}
     async with lock_external_state:
         external_state.update(state)
-        ext_state_dump = {'external-state': copy(external_state)}
+        if request.json.get("dump", True):
+            ext_state_dump = {'external-state': copy(external_state)}
 
-    if 'time' in request.json:
-        ext_state_dump['time'] = request.json['time']
-    await dumper.dump(ext_state_dump)
+    if request.json.get("dump", True):
+        if 'time' in request.json:
+            ext_state_dump['time'] = request.json['time']
+        await dumper.dump(ext_state_dump)
 
     # TODO: tell kotekan that this happened
 
@@ -211,9 +213,10 @@ async def sendState(request):
     async with lock_requested_states:
         requested_states.remove(hash)
 
-    # Dump state to file
-    state_dump = {'state': state, 'hash': hash, 'type': type}
-    await dumper.dump(state_dump)
+    if request.json.get("dump", True):
+        # Dump state to file
+        state_dump = {'state': state, 'hash': hash}
+        await dumper.dump(state_dump)
 
     return response.json(reply)
 
@@ -251,7 +254,7 @@ async def registerDataset(request):
         elif dataset_valid:
             # save the dataset
             saveDataset(hash, ds, root)
-            dump = True
+            dump = request.json.get("dump", True)
 
             reply['result'] = "success"
             signal_datasets_updated.notify_all()

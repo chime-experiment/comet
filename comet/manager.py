@@ -192,9 +192,10 @@ class Manager:
         self._check_result(reply.get('result'), endpoint)
         return reply
 
-    def _send_state(self, state_id, state, type):
+    def _send_state(self, state_id, state, type, dump=True):
         self.logger.debug('sending state {}'.format(state_id))
-        request = {'hash': state_id, 'state': state, 'type': type}
+
+        request = {'hash': state_id, 'state': state, 'type': type, "dump": dump}
         self._send(SEND_STATE, request)
 
     def _check_result(self, result, endpoint):
