@@ -1,6 +1,12 @@
 import json
 import os
+import tempfile
+import time
 import pytest
+import shutil
+import signal
+
+from subprocess import Popen
 
 from datetime import datetime, timedelta
 from comet import Manager, ManagerError
@@ -26,6 +32,19 @@ def manager():
     return Manager('localhost', DEFAULT_PORT)
 
 
+@pytest.fixture(scope='session', autouse=True)
+def broker():
+    dir = tempfile.mkdtemp()
+
+    broker = Popen(['comet', '--debug', '1', '-d', dir])
+    time.sleep(2)
+    yield dir
+    pid = broker.pid
+    os.kill(pid, signal.SIGINT)
+    broker.terminate()
+    shutil.rmtree(dir)
+
+
 def test_hash(manager):
     assert isinstance(manager, Manager)
 
@@ -36,7 +55,7 @@ def test_hash(manager):
     assert manager._make_hash(A) != manager._make_hash(E)
 
 
-def test_register_config(manager):
+def test_register_config(manager, broker):
     now = datetime.utcnow()
     version = '0.1.1'
 
@@ -50,13 +69,13 @@ def test_register_config(manager):
     assert CONFIG == manager.get_state()
 
     # Find the dump file
-    dump_files = os.listdir("./")
+    dump_files = os.listdir(broker)
     dump_files = list(filter(lambda x: x.endswith("data.dump"), dump_files))
     dump_times = [f[:-10] for f in dump_files]
     dump_times = [datetime.strptime(t, TIMESTAMP_FORMAT) for t in dump_times]
     freshest = dump_times.index(max(dump_times))
 
-    with open(dump_files[freshest], 'r') as json_file:
+    with open(os.path.join(broker, dump_files[freshest]), 'r') as json_file:
         comet_start_dump = json.loads(json_file.readline())
         comet_config_dump = json.loads(json_file.readline())
 
@@ -83,3 +102,21 @@ def test_register_config(manager):
         config_dump['time'], TIMESTAMP_FORMAT
     ) - datetime.utcnow() < timedelta(minutes=1)
     assert config_dump['hash'] == manager._make_hash(expected_config_dump)
+
+
+# TODO: register stuff here, then with a new broke test recovery in test_recover
+def test_register(manager, broker):
+    pass
+
+
+def test_recover(manager, broker):
+    state_id = manager.register_state({'foo': "bar"}, "test")
+
+    dset_id = manager.register_dataset(state_id, None, ["test"], True)
+
+    ds = manager.get_dataset(dset_id)
+    state = manager.get_state("test")
+    assert state == {"foo": "bar", "type": "test"}
+    assert ds["is_root"] is True
+    # TODO: fix hash function # assert ds["state"] == manager._make_hash(state)
+    assert ds["types"] == ["test"]

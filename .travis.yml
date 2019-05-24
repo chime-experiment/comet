@@ -21,10 +21,6 @@ script:
     - pycodestyle --max-line-length=99 .
     - pydocstyle --convention=numpy .
 
-    # Run comet
+    # Run tests
     - export PYTHONPATH=.:$PYTHONPATH
-    - ./scripts/comet &
-    - sleep 2
-
-    # Tests
     - pytest

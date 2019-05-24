@@ -1,6 +1,9 @@
 """REST Server for CoMeT (the Dataset Broker)."""
 import asyncio
 import datetime
+import json
+import os
+
 from bisect import bisect_left
 from copy import copy
 from signal import signal, SIGINT
@@ -14,7 +17,7 @@ from concurrent.futures import CancelledError
 
 from . import __version__
 from .dumper import Dumper
-from .manager import Manager, CometError
+from .manager import Manager, CometError, TIMESTAMP_FORMAT
 
 WAIT_TIME = 40
 DEFAULT_PORT = 12050
@@ -532,11 +535,11 @@ async def tree(root):
 class Broker():
     """Main class to run the comet dataset broker."""
 
-    def __init__(self, data_dump_path, file_lock_time, debug):
+    def __init__(self, data_dump_path, file_lock_time, debug, recover):
         global dumper
 
         self.config = {"data_dump_path": data_dump_path, "file_lock_time": file_lock_time,
-                       "debug": debug}
+                       "debug": debug, "recover": recover}
 
         dumper = Dumper(data_dump_path, file_lock_time)
         self.debug = debug
@@ -544,16 +547,49 @@ class Broker():
 
     @staticmethod
     def _wait_and_register(startup_time, config):
+        global dumper
         sleep(1)
         manager = Manager("localhost", DEFAULT_PORT)
         try:
             manager.register_start(startup_time, __version__)
-            manager.register_config(config)
         except CometError as exc:
             logger.error('Comet failed registering its own startup and initial config: {}'
                          .format(exc))
             del dumper
             exit(1)
+
+        if config["recover"]:
+            logger.info("Reading dump files to recover state.")
+            # Find the dump files
+            dump_files = os.listdir(config["data_dump_path"])
+            dump_files = list(filter(lambda x: x.endswith("data.dump"), dump_files))
+            dump_times = [f[:-10] for f in dump_files]
+            dump_times = [datetime.datetime.strptime(t, TIMESTAMP_FORMAT) for t in dump_times]
+            dump_times.sort()
+
+            threads = list()
+            for file in dump_files:
+                with open(os.path.join(config["data_dump_path"], file), 'r') as json_file:
+                    for line in json_file:
+                        entry = json.loads(line)
+                        if "state" in entry.keys():
+                            # Don't register the start state we just sent.
+                            if not entry["state"] == manager.states[manager.start_state]:
+                                manager.register_state(entry["state"], entry["state"]["type"],
+                                                       False, entry["time"], entry['hash'])
+                        if "ds" in entry.keys():
+                            threads.append(Thread(target=manager.register_dataset,
+                                                  args=(entry["ds"]["state"],
+                                                        entry["ds"].get("base_dset", None),
+                                                        entry["ds"]["types"],
+                                                        entry["ds"]["is_root"], False,
+                                                        entry["time"], entry["hash"])))
+                            threads[-1].start()
+
+            for t in threads:
+                t.join()
+
+        manager.register_config(config)
 
     def run(self):
         """Run comet dataset broker."""
@@ -561,6 +597,7 @@ class Broker():
 
         print("Starting CoMeT dataset_broker({}) using port {}."
               .format(__version__, DEFAULT_PORT))
+
         server = app.create_server(host="0.0.0.0", port=DEFAULT_PORT, return_asyncio_server=True,
                                    access_log=True, debug=self.debug)
         loop = asyncio.get_event_loop()
