@@ -153,7 +153,8 @@ async def registerState(request):
     reply = dict(result="success")
 
     async with lock_states:
-        if states.get(hash) is None:
+        state = states.get(hash)
+        if state is None:
             # we don't know this state, did we request it already?
             async with lock_requested_states:
                 if hash in requested_states:
@@ -165,6 +166,13 @@ async def registerState(request):
             reply['request'] = "get_state"
             reply['hash'] = hash
             logger.debug('register-state: Asking for state, hash: {}'.format(hash))
+
+    if request.json.get("dump", True):
+        if state is not None:
+            # Dump state to file
+            state_dump = {'state': state, 'hash': hash}
+            await dumper.dump(state_dump)
+
     return response.json(reply)
 
 
