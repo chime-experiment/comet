@@ -186,10 +186,9 @@ async def sendState(request):
     """
     global states
     global requested_states
-
     hash = request.json['hash']
     state = request.json['state']
-    type = request.json['type']
+    type = state['type']
     logger.debug('send-state: Received {} state {}'.format(type, hash))
     reply = dict()
 

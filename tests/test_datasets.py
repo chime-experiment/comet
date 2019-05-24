@@ -63,11 +63,11 @@ def test_register_config(manager):
         start_dump = json.loads(json_file.readline())
         config_dump = json.loads(json_file.readline())
 
-    assert comet_start_dump['type'] == 'start_comet.broker'
-    assert comet_config_dump['type'] == 'config_comet.broker'
+    assert comet_start_dump['state']['type'] == 'start_comet.broker'
+    assert comet_config_dump['state']['type'] == 'config_comet.broker'
 
-    expected_start_dump = {'time': now.strftime(TIMESTAMP_FORMAT), 'version': version}
-    assert start_dump['type'] == 'start_{}'.format(__name__)
+    expected_start_dump = {'time': now.strftime(TIMESTAMP_FORMAT), 'version': version,
+                           'type': 'start_{}'.format(__name__)}
     assert start_dump['state'] == expected_start_dump
     assert start_dump['hash'] == manager._make_hash(expected_start_dump)
     assert datetime.strptime(start_dump['time'], TIMESTAMP_FORMAT) - datetime.utcnow() < timedelta(
@@ -75,9 +75,11 @@ def test_register_config(manager):
     assert datetime.strptime(start_dump['state']['time'],
                              TIMESTAMP_FORMAT) - datetime.utcnow() < timedelta(minutes=1)
 
-    assert config_dump['type'] == 'config_{}'.format(__name__)
-    assert config_dump['state'] == CONFIG
+    expected_config_dump = CONFIG
+    expected_config_dump['type'] = 'config_{}'.format(__name__)
+
+    assert config_dump['state'] == expected_config_dump
     assert datetime.strptime(
         config_dump['time'], TIMESTAMP_FORMAT
     ) - datetime.utcnow() < timedelta(minutes=1)
-    assert config_dump['hash'] == manager._make_hash(CONFIG)
+    assert config_dump['hash'] == manager._make_hash(expected_config_dump)

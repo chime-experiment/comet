@@ -106,7 +106,8 @@ class Manager:
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
         self.logger.info('Registering startup for {}.'.format(name))
 
-        state = {'time': start_time.strftime(TIMESTAMP_FORMAT), 'version': version}
+        state = {'time': start_time.strftime(TIMESTAMP_FORMAT), 'version': version,
+                 "type": 'start_{}'.format(name)}
         state_id = self._make_hash(state)
 
         request = {'hash': state_id}
@@ -117,7 +118,7 @@ class Manager:
             if reply.get('hash') != state_id:
                 raise BrokerError('The broker is asking for state {} when state {} (start) was '
                                   'registered.'.format(reply.get('hash'), state_id))
-            self._send_state(state_id, state, 'start_{}'.format(name))
+            self._send_state(state_id, state)
 
         self.states[state_id] = state
         self.start_state = state_id
@@ -161,6 +162,7 @@ class Manager:
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
         self.logger.info('Registering config for {}.'.format(name))
 
+        config['type'] = 'config_{}'.format(name)
         state_id = self._make_hash(config)
 
         request = {'hash': state_id}
@@ -171,7 +173,7 @@ class Manager:
             if reply.get('hash') != state_id:
                 raise BrokerError('The broker is asking for state {} when state {} (config) '
                                   'was registered.'.format(reply.get('hash'), state_id))
-            self._send_state(state_id, config, 'config_{}'.format(name))
+            self._send_state(state_id, config)
 
         self.states[state_id] = config
         self.config_state = state_id
@@ -192,10 +194,10 @@ class Manager:
         self._check_result(reply.get('result'), endpoint)
         return reply
 
-    def _send_state(self, state_id, state, type, dump=True):
+    def _send_state(self, state_id, state, dump=True):
         self.logger.debug('sending state {}'.format(state_id))
 
-        request = {'hash': state_id, 'state': state, 'type': type, "dump": dump}
+        request = {'hash': state_id, 'state': state, "dump": dump}
         self._send(SEND_STATE, request)
 
     def _check_result(self, result, endpoint):
