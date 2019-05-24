@@ -58,6 +58,8 @@ class Manager:
         self.config_state = None
         self.start_state = None
         self.states = dict()
+        self.state_reg_time = dict()
+        self.datasets = dict()
         logging.basicConfig()
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
@@ -122,6 +124,7 @@ class Manager:
 
         self.states[state_id] = state
         self.start_state = state_id
+        self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         return
 
@@ -177,8 +180,130 @@ class Manager:
 
         self.states[state_id] = config
         self.config_state = state_id
+        self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         return
+
+    def register_state(self, state, state_type, dump=True, timestamp=None, state_id=None):
+        """Register a state with the broker.
+
+        This does not attach the state to a dataset. (yet!)
+
+        Parameters
+        ----------
+        state : dict
+            The state should be a JSON-serializable dictionary.
+        state_type : str
+            The name of the state type (e.g. "inputs", "metadata"). Be careful not choosing
+            something used elsewhere.
+        dump : bool
+            Tells the broker if the state should be dumped to file or not.
+        timestamp : str
+            Overwrite the timestamp attached to this state. Should have the format
+            `comet.manager.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
+            time. Only supply this if you know what you're doing. This is for example to resend
+            previously dumped states to the broker again after a crash.
+        state_id : int
+            Manually set the hash of this state instead of letting comet compute it. Set this only
+            if you know what you are doing. This is for example to resend states originally hashed
+            and registered by kotekan after a failure or restart. Default: None.
+
+        Raises
+        ------
+        :class:`ManagerError`
+            If there was an internal error in the dataset management.
+        :class:`BrokerError`
+            If there was an error in registering stuff with the broker.
+        :class:`ConnectionError`
+            If the broker can't be reached.
+
+        """
+        if not isinstance(state, dict):
+            raise ManagerError('state needs to be a dictionary (is `{}`).'
+                               .format(type(state).__name__))
+        if not self.start_state:
+            raise ManagerError("Start has to be registered before anything else "
+                               "(use 'register_start()').")
+
+        if state_id is None:
+            state_id = self._make_hash(state)
+        state["type"] = state_type
+
+        request = {'hash': state_id, "dump": dump}
+        if timestamp:
+            request["time"] = timestamp
+        reply = self._send(REGISTER_STATE, request)
+
+        # Does the broker ask for the state?
+        if reply.get('request') == 'get_state':
+            if reply.get('hash') != state_id:
+                raise BrokerError('The broker is asking for state {} when state {} ({}) was '
+                                  'registered.'.format(reply.get('hash'), state_id, state_type))
+            self._send_state(state_id, state, dump)
+
+        self.states[state_id] = state
+        self.state_reg_time[state_id] = datetime.datetime.utcnow()
+
+        return state_id
+
+    def register_dataset(self, state, base_ds, types, root=False, dump=True, timestamp=None,
+                         ds_id=None):
+        """Register a dataset with the broker.
+
+        Parameters
+        ----------
+        state : int
+            Hash / state ID of the state attached to this dataset.
+        base_ds : int
+            Hash / dataset ID of the base dataset or `None` if this is a root dataset.
+        types : list of str
+            State type name(s) of this state and its inner state(s).
+        root : bool
+            `True` if this is a root dataset (default `False`).
+        dump : bool
+            Tells the broker if the state should be dumped to file or not.
+        timestamp : str
+            Overwrite the timestamp attached to this dataset. Should have the format
+            `comet.manager.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
+            time. Only supply this if you know what you're doing. This is for example to resend
+            previously dumped datasets to the broker again after a crash.
+        ds_id : int
+            Manually set the hash of this dataset instead of letting comet compute it. Set this
+            only if you know what you are doing. This is for example to resend states originally
+            hashed and registered by kotekan after a failure or restart. Default: None.
+
+        Raises
+        ------
+        :class:`ManagerError`
+            If there was an internal error in the dataset management.
+        :class:`BrokerError`
+            If there was an error in registering stuff with the broker.
+        :class:`ConnectionError`
+            If the broker can't be reached.
+
+        """
+        if not isinstance(state, int):
+            raise ManagerError('state needs to be a hash (int) (is `{}`).'
+                               .format(type(state).__name__))
+        if not self.start_state:
+            raise ManagerError("Start has to be registered before anything else "
+                               "(use 'register_start()').")
+
+        ds = {"is_root": root, "state": state, "types": types}
+        if base_ds is not None:
+            ds["base_dset"] = base_ds
+
+        if ds_id is None:
+            ds_id = self._make_hash(ds)
+
+        request = {'hash': ds_id, "ds": ds, "dump": dump}
+        if timestamp:
+            request["time"] = timestamp
+        self._send(REGISTER_DATASET, request)
+
+        self.datasets[ds_id] = ds
+
+        return ds_id
 
     def _send(self, endpoint, data):
         try:
@@ -238,7 +363,47 @@ class Manager:
             The last config or state of requested type that was registered. Returns `None` if
             requested state not found.
         """
+        if dataset_id is not None:
+            raise ManagerError('get_state: Not implemented for dataset_id other than None.')
+
         if type is None:
             return self.states[self.config_state]
 
-        raise ManagerError('get_state: Not implemented for anything but config.')
+        states_of_type = list()
+        for state_id in self.states:
+            state = self.states[state_id]
+            if state["type"] == type:
+                states_of_type.append(state)
+
+        if states_of_type:
+            states_of_type.sort(
+                key=lambda s: self.state_reg_time[state_id])
+            return states_of_type[-1]
+        return None
+
+    def get_dataset(self, dataset_id=None):
+        """
+        Get a dataset.
+
+        If called without parameters, this returns the dataset added last.
+
+        Note
+        ----
+        This only finds datasets that where registered locally with the comet manager.
+
+        TODO
+        ----
+        Ask the broker for unknown datasets.
+
+        Parameters
+        ----------
+        dataset_id : int
+            The ID of the dataset that should be returned. If this is `None` the dataset added last
+            is returned. Default: `None`.
+
+        Returns
+        -------
+        dict
+            The requested dataset. Returns `None` if requested dataset not found.
+        """
+        return self.datasets.get(dataset_id, None)
