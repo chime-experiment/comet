@@ -175,7 +175,7 @@ async def registerState(request):
     if request.json.get("dump", True):
         if state is not None:
             # Dump state to file
-            state_dump = {'state': state, 'hash': hash}
+            state_dump = {'state': None, 'hash': hash}
             await dumper.dump(state_dump)
 
     return response.json(reply)
