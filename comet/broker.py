@@ -6,7 +6,6 @@ import os
 
 from bisect import bisect_left
 from copy import copy
-from signal import signal, SIGINT
 from threading import Thread
 from time import sleep
 
@@ -579,6 +578,8 @@ class Broker():
                                 manager.register_state(entry["state"], entry["state"]["type"],
                                                        False, entry["time"], entry['hash'])
                         if "ds" in entry.keys():
+                            # States need to be registered parallelly, because some registrations
+                            # make the broker wait for another state.
                             threads.append(Thread(target=manager.register_dataset,
                                                   args=(entry["ds"]["state"],
                                                         entry["ds"].get("base_dset", None),
@@ -599,20 +600,11 @@ class Broker():
         print("Starting CoMeT dataset_broker({}) using port {}."
               .format(__version__, DEFAULT_PORT))
 
-        server = app.create_server(host="0.0.0.0", port=DEFAULT_PORT, return_asyncio_server=True,
-                                   access_log=True, debug=self.debug)
-        loop = asyncio.get_event_loop()
-        task = asyncio.ensure_future(server)
-        signal(SIGINT, lambda s, f: loop.stop())
-
         # Register config with broker
         t = Thread(target=self._wait_and_register, args=(self.startup_time, self.config,))
         t.start()
 
-        try:
-            loop.run_forever()
-        except BaseException:
-            loop.stop()
-            del dumper
-            raise
-        del dumper
+        app.run(host="0.0.0.0", port=DEFAULT_PORT, return_asyncio_server=True, workers=1,
+                access_log=True, debug=self.debug)
+
+        t.join()
