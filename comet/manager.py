@@ -221,7 +221,7 @@ class Manager:
             If the broker can't be reached.
 
         """
-        if not isinstance(state, dict):
+        if not (isinstance(state, dict) or state is None):
             raise ManagerError('state needs to be a dictionary (is `{}`).'
                                .format(type(state).__name__))
         if not self.start_state:
@@ -230,7 +230,10 @@ class Manager:
 
         state = copy.deepcopy(state)
 
-        state["type"] = state_type
+        if state_type:
+            state["type"] = state_type
+        elif state:
+            state_type = state["type"]
         if state_id is None:
             state_id = self._make_hash(state)
 

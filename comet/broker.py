@@ -191,7 +191,10 @@ async def sendState(request):
     global requested_states
     hash = request.json['hash']
     state = request.json['state']
-    type = state['type']
+    if state:
+        type = state['type']
+    else:
+        type = None
     logger.debug('send-state: Received {} state {}'.format(type, hash))
     reply = dict()
 
@@ -568,17 +571,21 @@ class Broker():
             dump_times.sort()
 
             threads = list()
-            for file in dump_files:
-                logger.info("Reading dump file: {}".format(file))
-                with open(os.path.join(config["data_dump_path"], file), 'r') as json_file:
+            for dfile in dump_files:
+                with open(os.path.join(config["data_dump_path"], dfile), 'r') as json_file:
                     for line in json_file:
                         entry = json.loads(line)
                         if "state" in entry.keys():
                             # Don't register the start state we just sent.
-                            if not entry["state"] == manager.states[manager.start_state]:
-                                manager.register_state(entry["state"], entry["state"]["type"],
-                                                       False, entry["time"], entry['hash'])
-                        if "ds" in entry.keys():
+                            state = entry["state"]
+                            if not state == manager.states[manager.start_state]:
+                                if state:
+                                    state_type = state["type"]
+                                else:
+                                    state_type = None
+                                manager.register_state(entry["state"], state_type, False,
+                                                       entry["time"], entry['hash'])
+                        elif "ds" in entry.keys():
                             threads.append(Thread(target=manager.register_dataset,
                                                   args=(entry["ds"]["state"],
                                                         entry["ds"].get("base_dset", None),
