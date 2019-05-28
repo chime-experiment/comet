@@ -19,7 +19,7 @@ def str2bool(v):
 
 def start(args):
     comet = Broker(args.dump_path, args.file_lock_time, args.debug, args.recover)
-    comet.run()
+    comet.run_comet()
 
 
 parser = argparse.ArgumentParser(description="This is comet (a Config and Metadata Tracker).")

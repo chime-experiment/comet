@@ -37,11 +37,14 @@ def broker():
     dir = tempfile.mkdtemp()
 
     broker = Popen(['comet', '--debug', '1', '-d', dir])
-    time.sleep(2)
+    time.sleep(3)
     yield dir
     pid = broker.pid
     os.kill(pid, signal.SIGINT)
     broker.terminate()
+
+    # Give the broker a moment to delete the .lock file
+    time.sleep(.1)
     shutil.rmtree(dir)
 
 
@@ -79,6 +82,9 @@ def test_register_config(manager, broker):
     freshest = dump_times.index(max(dump_times))
 
     with open(os.path.join(broker, dump_files[freshest]), 'r') as json_file:
+        json_file.readline()
+        json_file.readline()
+
         comet_start_dump = json.loads(json_file.readline())
         comet_config_dump = json.loads(json_file.readline())
 

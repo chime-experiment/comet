@@ -572,8 +572,11 @@ class Broker():
 
             threads = list()
             for dfile in dump_files:
+                log.info("Reading dump file: {}".format(dfile))
                 with open(os.path.join(config["data_dump_path"], dfile), 'r') as json_file:
+                    line_num = 0
                     for line in json_file:
+                        line_num += 1
                         entry = json.loads(line)
                         if "state" in entry.keys():
                             # Don't register the start state we just sent.
@@ -586,6 +589,8 @@ class Broker():
                                 manager.register_state(entry["state"], state_type, False,
                                                        entry["time"], entry['hash'])
                         elif "ds" in entry.keys():
+                            # States need to be registered parallelly, because some registrations
+                            # make the broker wait for another state.
                             threads.append(Thread(target=manager.register_dataset,
                                                   args=(entry["ds"]["state"],
                                                         entry["ds"].get("base_dset", None),
@@ -593,33 +598,40 @@ class Broker():
                                                         entry["ds"]["is_root"], False,
                                                         entry["time"], entry["hash"])))
                             threads[-1].start()
+                        else:
+                            logger.warn("Dump file entry {}:{} has neither state nor dataset. "
+                                        "Skipping...\nThis is the entry: {}"
+                                        .format(dfile, line_num, entry))
 
             for t in threads:
                 t.join()
 
         manager.register_config(config)
 
-    def run(self):
+    def run_comet(self):
         """Run comet dataset broker."""
         global dumper
 
         print("Starting CoMeT dataset_broker({}) using port {}."
               .format(__version__, DEFAULT_PORT))
 
-        server = app.create_server(host="0.0.0.0", port=DEFAULT_PORT, return_asyncio_server=True,
-                                   access_log=True, debug=self.debug)
-        loop = asyncio.get_event_loop()
-        task = asyncio.ensure_future(server)
-        signal(SIGINT, lambda s, f: loop.stop())
-
         # Register config with broker
         t = Thread(target=self._wait_and_register, args=(self.startup_time, self.config,))
         t.start()
 
+        server = app.create_server(host="0.0.0.0", port=DEFAULT_PORT, return_asyncio_server=True,
+                                   access_log=True, debug=self.debug)
+        loop = asyncio.get_event_loop()
+        loop.slow_callback_duration = 10000
+        task = asyncio.ensure_future(server)
+        signal(SIGINT, lambda s, f: loop.stop())
+
         try:
             loop.run_forever()
         except BaseException:
+
             loop.stop()
             del dumper
             raise
         del dumper
+        t.join()
