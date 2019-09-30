@@ -11,7 +11,7 @@ services:
   - mysql
 
 before_install:
-    - pip install pycodestyle
+    - pip install black
     - pip install pydocstyle
     - pip install pytest
 
@@ -23,7 +23,7 @@ before_script:
 
 script:
     # Run pycodestyle on all .py files in all subfolders
-    - pycodestyle --max-line-length=99 .
+    - black --check .
     - pydocstyle --convention=numpy .
 
     # Run tests

@@ -16,31 +16,33 @@ import chimedb.core as chimedb
 from comet.manager import TIMESTAMP_FORMAT
 
 CHIMEDBRC = os.path.join(os.getcwd() + "/.chimedbrc")
-CHIMEDBRC_MESSAGE = "Could not find {}. It is important that this test uses this " \
-                    "file to connect to a dummy database. Otherwise it could write " \
-                    "into a production database.".format(CHIMEDBRC)
+CHIMEDBRC_MESSAGE = (
+    "Could not find {}. It is important that this test uses this "
+    "file to connect to a dummy database. Otherwise it could write "
+    "into a production database.".format(CHIMEDBRC)
+)
 
 # Some dummy states for testing:
-CONFIG = {'a': 1, 'b': 'fubar'}
-ABC = {'a': 0, 'b': 1, 'c': 2, 'd': 3}
-A = {'a': 1, 'b': 'fubar'}
-B = {'a': 1, 'b': 'fubar'}
-C = {'a': 1, 'b': 'fuba'}
-D = {'a': 1, 'c': 'fubar'}
-E = {'a': 2, 'b': 'fubar'}
-F = {'a': 1}
-G = {'b': 1}
-H = {'blubb': 'bla'}
-J = {'meta': 'data'}
+CONFIG = {"a": 1, "b": "fubar"}
+ABC = {"a": 0, "b": 1, "c": 2, "d": 3}
+A = {"a": 1, "b": "fubar"}
+B = {"a": 1, "b": "fubar"}
+C = {"a": 1, "b": "fuba"}
+D = {"a": 1, "c": "fubar"}
+E = {"a": 2, "b": "fubar"}
+F = {"a": 1}
+G = {"b": 1}
+H = {"blubb": "bla"}
+J = {"meta": "data"}
 
 now = datetime.utcnow()
-version = '0.1.1'
+version = "0.1.1"
 dir = tempfile.mkdtemp()
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def manager():
-    manager = Manager('localhost', DEFAULT_PORT)
+    manager = Manager("localhost", DEFAULT_PORT)
 
     # Wait for broker to start up.
     time.sleep(0.1)
@@ -50,13 +52,13 @@ def manager():
     return manager
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def broker():
     # Make sure we don't write to the actual chime database
     assert os.path.isfile(CHIMEDBRC), CHIMEDBRC_MESSAGE
     os.environ["CHIMEDBRC"] = CHIMEDBRC
 
-    broker = Popen(['comet', '--debug', '1', '-d', dir, "-t", "2"])
+    broker = Popen(["comet", "--debug", "1", "-d", dir, "-t", "2"])
     time.sleep(3)
     yield dir
     pid = broker.pid
@@ -64,13 +66,13 @@ def broker():
     broker.terminate()
 
     # Give the broker a moment to delete the .lock file
-    time.sleep(.1)
+    time.sleep(0.1)
     shutil.rmtree(dir)
 
 
-@pytest.fixture(scope='function', autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def archiver():
-    archiver = Popen(['comet_archiver', '-d', dir, "-i", "1"])
+    archiver = Popen(["comet_archiver", "-d", dir, "-i", "1"])
     yield dir
     pid = archiver.pid
     os.kill(pid, signal.SIGINT)
@@ -79,7 +81,7 @@ def archiver():
 
 @pytest.fixture(scope="session", autouse=False)
 def simple_ds(manager):
-    state_id = manager.register_state({'foo': "bar"}, "test")
+    state_id = manager.register_state({"foo": "bar"}, "test")
     dset_id = manager.register_dataset(state_id, None, ["test"], True)
 
     yield (dset_id, state_id)
@@ -98,7 +100,7 @@ def test_hash(manager):
 def test_register_config(manager, broker):
 
     expected_config_dump = CONFIG
-    expected_config_dump['type'] = 'config_{}'.format(__name__)
+    expected_config_dump["type"] = "config_{}".format(__name__)
 
     assert expected_config_dump == manager.get_state()
 
@@ -109,30 +111,35 @@ def test_register_config(manager, broker):
     dump_times = [datetime.strptime(t, TIMESTAMP_FORMAT) for t in dump_times]
     freshest = dump_times.index(max(dump_times))
 
-    with open(os.path.join(broker, dump_files[freshest]), 'r') as json_file:
+    with open(os.path.join(broker, dump_files[freshest]), "r") as json_file:
         comet_start_dump = json.loads(json_file.readline())
         comet_config_dump = json.loads(json_file.readline())
 
         start_dump = json.loads(json_file.readline())
         config_dump = json.loads(json_file.readline())
 
-    assert comet_start_dump['state']['type'] == 'start_comet.broker'
-    assert comet_config_dump['state']['type'] == 'config_comet.broker'
+    assert comet_start_dump["state"]["type"] == "start_comet.broker"
+    assert comet_config_dump["state"]["type"] == "config_comet.broker"
 
-    expected_start_dump = {'time': now.strftime(TIMESTAMP_FORMAT), 'version': version,
-                           'type': 'start_{}'.format(__name__)}
-    assert start_dump['state'] == expected_start_dump
-    assert start_dump['hash'] == manager._make_hash(expected_start_dump)
-    assert datetime.strptime(start_dump['time'], TIMESTAMP_FORMAT) - datetime.utcnow() < timedelta(
-        minutes=1)
-    assert datetime.strptime(start_dump['state']['time'],
-                             TIMESTAMP_FORMAT) - datetime.utcnow() < timedelta(minutes=1)
-
-    assert config_dump['state'] == expected_config_dump
+    expected_start_dump = {
+        "time": now.strftime(TIMESTAMP_FORMAT),
+        "version": version,
+        "type": "start_{}".format(__name__),
+    }
+    assert start_dump["state"] == expected_start_dump
+    assert start_dump["hash"] == manager._make_hash(expected_start_dump)
     assert datetime.strptime(
-        config_dump['time'], TIMESTAMP_FORMAT
+        start_dump["time"], TIMESTAMP_FORMAT
     ) - datetime.utcnow() < timedelta(minutes=1)
-    assert config_dump['hash'] == manager._make_hash(expected_config_dump)
+    assert datetime.strptime(
+        start_dump["state"]["time"], TIMESTAMP_FORMAT
+    ) - datetime.utcnow() < timedelta(minutes=1)
+
+    assert config_dump["state"] == expected_config_dump
+    assert datetime.strptime(
+        config_dump["time"], TIMESTAMP_FORMAT
+    ) - datetime.utcnow() < timedelta(minutes=1)
+    assert config_dump["hash"] == manager._make_hash(expected_config_dump)
 
 
 # TODO: register stuff here, then with a new broker test recovery in test_recover
@@ -145,8 +152,8 @@ def test_recover(manager, broker, simple_ds):
 
     # Give archiver a moment and make broker release dump file by registering another state.
     time.sleep(2)
-    manager.register_config({'blubb': 1})
-    time.sleep(.1)
+    manager.register_config({"blubb": 1})
+    time.sleep(0.1)
 
     ds = manager.get_dataset(dset_id)
     state = manager.get_state("test")

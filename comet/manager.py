@@ -7,15 +7,15 @@ import logging
 import requests
 import json
 
-LOG_FORMAT = '[%(asctime)s] %(name)s: %(message)s'
+LOG_FORMAT = "[%(asctime)s] %(name)s: %(message)s"
 
 # Endpoint names:
-REGISTER_STATE = '/register-state'
-REGISTER_DATASET = '/register-dataset'
-SEND_STATE = '/send-state'
-REGISTER_EXTERNAL_STATE = '/register-external-state'
+REGISTER_STATE = "/register-state"
+REGISTER_DATASET = "/register-dataset"
+SEND_STATE = "/send-state"
+REGISTER_EXTERNAL_STATE = "/register-external-state"
 
-TIMESTAMP_FORMAT = '%Y-%m-%d-%H:%M:%S.%f'
+TIMESTAMP_FORMAT = "%Y-%m-%d-%H:%M:%S.%f"
 
 TIMEOUT = 60
 
@@ -57,7 +57,7 @@ class Manager:
         port : int
             Dataset broker port.
         """
-        self.broker = 'http://{}:{}'.format(host, port)
+        self.broker = "http://{}:{}".format(host, port)
         self.config_state = None
         self.start_state = None
         self.states = dict()
@@ -97,32 +97,45 @@ class Manager:
 
         """
         if not isinstance(start_time, datetime.datetime):
-            raise ManagerError("start_time needs to be of type 'datetime.datetime' (is {})."
-                               .format(type(start_time).__name__))
+            raise ManagerError(
+                "start_time needs to be of type 'datetime.datetime' (is {}).".format(
+                    type(start_time).__name__
+                )
+            )
         if not isinstance(version, str):
-            raise ManagerError("version needs to be of type 'str' (is {})."
-                               .format(type(start_time).__name__))
+            raise ManagerError(
+                "version needs to be of type 'str' (is {}).".format(
+                    type(start_time).__name__
+                )
+            )
         if self.start_state:
-            raise ManagerError('A startup was already registered, this can only be done once.')
+            raise ManagerError(
+                "A startup was already registered, this can only be done once."
+            )
 
         # get name of callers module
         name = inspect.getmodule(inspect.stack()[1][0]).__name__
-        if name == '__main__':
+        if name == "__main__":
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
-        self.logger.info('Registering startup for {}.'.format(name))
+        self.logger.info("Registering startup for {}.".format(name))
 
-        state = {'time': start_time.strftime(TIMESTAMP_FORMAT), 'version': version,
-                 "type": 'start_{}'.format(name)}
+        state = {
+            "time": start_time.strftime(TIMESTAMP_FORMAT),
+            "version": version,
+            "type": "start_{}".format(name),
+        }
         state_id = self._make_hash(state)
 
-        request = {'hash': state_id}
+        request = {"hash": state_id}
         reply = self._send(REGISTER_STATE, request)
 
         # Does the broker ask for the state?
-        if reply.get('request') == 'get_state':
-            if reply.get('hash') != state_id:
-                raise BrokerError('The broker is asking for state {} when state {} (start) was '
-                                  'registered.'.format(reply.get('hash'), state_id))
+        if reply.get("request") == "get_state":
+            if reply.get("hash") != state_id:
+                raise BrokerError(
+                    "The broker is asking for state {} when state {} (start) was "
+                    "registered.".format(reply.get("hash"), state_id)
+                )
             self._send_state(state_id, state)
 
         self.states[state_id] = state
@@ -156,31 +169,37 @@ class Manager:
 
         """
         if not isinstance(config, dict):
-            raise ManagerError('config needs to be a dictionary (is `{}`).'
-                               .format(type(config).__name__))
+            raise ManagerError(
+                "config needs to be a dictionary (is `{}`).".format(
+                    type(config).__name__
+                )
+            )
         if not self.start_state:
-            raise ManagerError("Start has to be registered before config "
-                               "(use 'register_start()').")
+            raise ManagerError(
+                "Start has to be registered before config " "(use 'register_start()')."
+            )
 
         # get name of callers module
         name = inspect.getmodule(inspect.stack()[1][0]).__name__
-        if name == '__main__':
+        if name == "__main__":
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
-        self.logger.info('Registering config for {}.'.format(name))
+        self.logger.info("Registering config for {}.".format(name))
 
         state = copy.deepcopy(config)
 
-        state['type'] = 'config_{}'.format(name)
+        state["type"] = "config_{}".format(name)
         state_id = self._make_hash(state)
 
-        request = {'hash': state_id}
+        request = {"hash": state_id}
         reply = self._send(REGISTER_STATE, request)
 
         # Does the broker ask for the state?
-        if reply.get('request') == 'get_state':
-            if reply.get('hash') != state_id:
-                raise BrokerError('The broker is asking for state {} when state {} (config) '
-                                  'was registered.'.format(reply.get('hash'), state_id))
+        if reply.get("request") == "get_state":
+            if reply.get("hash") != state_id:
+                raise BrokerError(
+                    "The broker is asking for state {} when state {} (config) "
+                    "was registered.".format(reply.get("hash"), state_id)
+                )
             self._send_state(state_id, state)
 
         self.states[state_id] = state
@@ -189,7 +208,9 @@ class Manager:
 
         return
 
-    def register_state(self, state, state_type, dump=True, timestamp=None, state_id=None):
+    def register_state(
+        self, state, state_type, dump=True, timestamp=None, state_id=None
+    ):
         """Register a state with the broker.
 
         This does not attach the state to a dataset. (yet!)
@@ -224,11 +245,14 @@ class Manager:
 
         """
         if not (isinstance(state, dict) or state is None):
-            raise ManagerError('state needs to be a dictionary (is `{}`).'
-                               .format(type(state).__name__))
+            raise ManagerError(
+                "state needs to be a dictionary (is `{}`).".format(type(state).__name__)
+            )
         if not self.start_state:
-            raise ManagerError("Start has to be registered before anything else "
-                               "(use 'register_start()').")
+            raise ManagerError(
+                "Start has to be registered before anything else "
+                "(use 'register_start()')."
+            )
 
         state = copy.deepcopy(state)
 
@@ -239,16 +263,18 @@ class Manager:
         if state_id is None:
             state_id = self._make_hash(state)
 
-        request = {'hash': state_id, "dump": dump}
+        request = {"hash": state_id, "dump": dump}
         if timestamp:
             request["time"] = timestamp
         reply = self._send(REGISTER_STATE, request)
 
         # Does the broker ask for the state?
-        if reply.get('request') == 'get_state':
-            if reply.get('hash') != state_id:
-                raise BrokerError('The broker is asking for state {} when state {} ({}) was '
-                                  'registered.'.format(reply.get('hash'), state_id, state_type))
+        if reply.get("request") == "get_state":
+            if reply.get("hash") != state_id:
+                raise BrokerError(
+                    "The broker is asking for state {} when state {} ({}) was "
+                    "registered.".format(reply.get("hash"), state_id, state_type)
+                )
             self._send_state(state_id, state, dump)
 
         self.states[state_id] = state
@@ -256,8 +282,9 @@ class Manager:
 
         return state_id
 
-    def register_dataset(self, state, base_ds, types, root=False, dump=True, timestamp=None,
-                         ds_id=None):
+    def register_dataset(
+        self, state, base_ds, types, root=False, dump=True, timestamp=None, ds_id=None
+    ):
         """Register a dataset with the broker.
 
         Parameters
@@ -293,11 +320,14 @@ class Manager:
 
         """
         if not isinstance(state, int):
-            raise ManagerError('state needs to be a hash (int) (is `{}`).'
-                               .format(type(state).__name__))
+            raise ManagerError(
+                "state needs to be a hash (int) (is `{}`).".format(type(state).__name__)
+            )
         if not self.start_state:
-            raise ManagerError("Start has to be registered before anything else "
-                               "(use 'register_start()').")
+            raise ManagerError(
+                "Start has to be registered before anything else "
+                "(use 'register_start()')."
+            )
 
         ds = {"is_root": root, "state": state, "types": types}
         if base_ds is not None:
@@ -306,7 +336,7 @@ class Manager:
         if ds_id is None:
             ds_id = self._make_hash(ds)
 
-        request = {'hash': ds_id, "ds": ds, "dump": dump}
+        request = {"hash": ds_id, "ds": ds, "dump": dump}
         if timestamp:
             request["time"] = timestamp
         self._send(REGISTER_DATASET, request)
@@ -317,28 +347,37 @@ class Manager:
 
     def _send(self, endpoint, data):
         try:
-            reply = requests.post(self.broker + endpoint, data=json.dumps(data), timeout=TIMEOUT)
+            reply = requests.post(
+                self.broker + endpoint, data=json.dumps(data), timeout=TIMEOUT
+            )
             reply.raise_for_status()
         except requests.exceptions.ConnectionError:
-            raise BrokerError('Failure connecting to comet.broker at {}{}: make sure it is '
-                              'running.'.format(self.broker, endpoint))
+            raise BrokerError(
+                "Failure connecting to comet.broker at {}{}: make sure it is "
+                "running.".format(self.broker, endpoint)
+            )
         except requests.exceptions.ReadTimeout:
-            raise BrokerError('Timeout when connecting to comet.broker at {}{}: make sure it is '
-                              'running.'.format(self.broker, endpoint))
+            raise BrokerError(
+                "Timeout when connecting to comet.broker at {}{}: make sure it is "
+                "running.".format(self.broker, endpoint)
+            )
         reply = reply.json()
-        self._check_result(reply.get('result'), endpoint)
+        self._check_result(reply.get("result"), endpoint)
         return reply
 
     def _send_state(self, state_id, state, dump=True):
-        self.logger.debug('sending state {}'.format(state_id))
+        self.logger.debug("sending state {}".format(state_id))
 
-        request = {'hash': state_id, 'state': state, "dump": dump}
+        request = {"hash": state_id, "state": state, "dump": dump}
         self._send(SEND_STATE, request)
 
     def _check_result(self, result, endpoint):
-        if result != 'success':
-            raise BrokerError('The {}{} answered with result `{}`, expected `success`.'
-                              .format(self.broker, endpoint, result))
+        if result != "success":
+            raise BrokerError(
+                "The {}{} answered with result `{}`, expected `success`.".format(
+                    self.broker, endpoint, result
+                )
+            )
 
     @staticmethod
     def _make_hash(data):
@@ -374,7 +413,9 @@ class Manager:
             requested state not found.
         """
         if dataset_id is not None:
-            raise ManagerError('get_state: Not implemented for dataset_id other than None.')
+            raise ManagerError(
+                "get_state: Not implemented for dataset_id other than None."
+            )
 
         if type is None:
             return self.states[self.config_state]
@@ -386,8 +427,7 @@ class Manager:
                 states_of_type.append(state)
 
         if states_of_type:
-            states_of_type.sort(
-                key=lambda s: self.state_reg_time[state_id])
+            states_of_type.sort(key=lambda s: self.state_reg_time[state_id])
             return states_of_type[-1]
         return None
 

@@ -22,7 +22,7 @@ from .manager import TIMESTAMP_FORMAT, LOG_FORMAT
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger("comet.archiver")
-logger.setLevel('INFO')
+logger.setLevel("INFO")
 
 
 class Archiver:
@@ -40,8 +40,11 @@ class Archiver:
             manager.register_start(startup_time, __version__)
             manager.register_config(config)
         except (CometError, ConnectionError) as exc:
-            logger.error('Comet archiver failed registering its startup and initial config: {}'
-                         .format(exc))
+            logger.error(
+                "Comet archiver failed registering its startup and initial config: {}".format(
+                    exc
+                )
+            )
             exit(1)
 
         self.loop = asyncio.get_event_loop()
@@ -60,9 +63,11 @@ class Archiver:
 
     def run(self):
         """Run comet archiver."""
-        logger.info("Started CoMeT Archiver ({}), scraping path '{}' every {}."
-                    .format(__version__, self.dir,
-                            datetime.timedelta(seconds=self.interval)))
+        logger.info(
+            "Started CoMeT Archiver ({}), scraping path '{}' every {}.".format(
+                __version__, self.dir, datetime.timedelta(seconds=self.interval)
+            )
+        )
 
         signal.signal(signal.SIGINT, lambda s, f: self.loop.stop())
 
@@ -78,9 +83,13 @@ class Archiver:
 
                 # Find the dumped files
                 dump_files = Path(self.dir).iterdir()
-                dump_files = list(filter(lambda x: x.as_posix().endswith("data.dump"), dump_files))
+                dump_files = list(
+                    filter(lambda x: x.as_posix().endswith("data.dump"), dump_files)
+                )
                 dump_times = [f.name[:-10] for f in dump_files]
-                dump_times = [datetime.datetime.strptime(t, TIMESTAMP_FORMAT) for t in dump_times]
+                dump_times = [
+                    datetime.datetime.strptime(t, TIMESTAMP_FORMAT) for t in dump_times
+                ]
                 if dump_files:
                     dump_times, dump_files = zip(*sorted(zip(dump_times, dump_files)))
 
@@ -93,13 +102,17 @@ class Archiver:
                     if not Path(self.dir).joinpath("{}.lock".format(dfile)).is_file():
                         # Set time_last_scraped to the timestamp of this file
                         time_last_scraped = time
-                        with open(Path(self.dir).joinpath(dfile).as_posix(), "r") as json_file:
+                        with open(
+                            Path(self.dir).joinpath(dfile).as_posix(), "r"
+                        ) as json_file:
                             line_num = 0
                             for line in json_file:
                                 line_num += 1
                                 entry = json.loads(line)
                                 self._insert_entry(entry, dfile, line_num)
-                        logger.info("Archived {} entries from {}".format(line_num, dfile))
+                        logger.info(
+                            "Archived {} entries from {}".format(line_num, dfile)
+                        )
 
                 # Check if there is anything in the buffer that is accepted now
                 buffer_len = len(self.entry_buffer)
@@ -114,8 +127,11 @@ class Archiver:
                 for e in self.entry_buffer:
                     logger.debug("{}".format(e))
 
-                logger.debug('Scraping again in {}.'
-                             .format(datetime.timedelta(seconds=self.interval)))
+                logger.debug(
+                    "Scraping again in {}.".format(
+                        datetime.timedelta(seconds=self.interval)
+                    )
+                )
 
                 await asyncio.sleep(self.interval)
         except BaseException:
@@ -129,23 +145,29 @@ class Archiver:
                     # Retry later
                     self.entry_buffer.append(entry)
             except KeyError as key:
-                logger.error("Entry in dump file {}:{} is missing key {}. "
-                             "Skipping! This is the entry:\n{}"
-                             .format(Path(self.dir).joinpath(dfile),
-                                     line_num, key, entry))
+                logger.error(
+                    "Entry in dump file {}:{} is missing key {}. "
+                    "Skipping! This is the entry:\n{}".format(
+                        Path(self.dir).joinpath(dfile), line_num, key, entry
+                    )
+                )
         elif "ds" in entry.keys():
             try:
                 db.insert_dataset(entry)
             except KeyError as key:
-                logger.error("Entry in dump file {}:{} is missing key {}. "
-                             "Skipping! This is the entry:\n{}"
-                             .format(Path(self.dir).joinpath(dfile),
-                                     line_num, key, entry))
+                logger.error(
+                    "Entry in dump file {}:{} is missing key {}. "
+                    "Skipping! This is the entry:\n{}".format(
+                        Path(self.dir).joinpath(dfile), line_num, key, entry
+                    )
+                )
         else:
-            logger.warning("Entry in dump file {}:{} is neither a state "
-                           "nor a dataset. Skipping! This is the entry:\n{}"
-                           .format(Path(self.dir).joinpath(dfile), line_num,
-                                   entry))
+            logger.warning(
+                "Entry in dump file {}:{} is neither a state "
+                "nor a dataset. Skipping! This is the entry:\n{}".format(
+                    Path(self.dir).joinpath(dfile), line_num, entry
+                )
+            )
 
     def stop(self):
         """Stop the archiver."""

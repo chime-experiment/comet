@@ -17,7 +17,9 @@ class Dumper:
 
     def __init__(self, path, file_lock_time):
         if not os.path.isdir(path):
-            logger.error("dump-path '{}' does not exist or is not a directory.".format(path))
+            logger.error(
+                "dump-path '{}' does not exist or is not a directory.".format(path)
+            )
             exit(1)
         self.path = path
         self.lock_time = datetime.timedelta(seconds=file_lock_time)
@@ -43,12 +45,14 @@ class Dumper:
         # Create new file
         now = datetime.datetime.utcnow()
         self.open_time = now
-        self.open_file = os.path.join(self.path, FILENAME.format(now.strftime(TIMESTAMP_FORMAT)))
+        self.open_file = os.path.join(
+            self.path, FILENAME.format(now.strftime(TIMESTAMP_FORMAT))
+        )
         self.lock_file = "{}.lock".format(self.open_file)
-        open(self.lock_file, 'x').close()
-        open(self.open_file, 'x').close()
+        open(self.lock_file, "x").close()
+        open(self.open_file, "x").close()
 
-        logger.debug('Created new file: {}'.format(self.open_file))
+        logger.debug("Created new file: {}".format(self.open_file))
 
     async def dump(self, data):
         """
@@ -60,8 +64,8 @@ class Dumper:
             JSON object to dump.
         """
         # Make sure the dump has a timestamp
-        if 'time' not in data.keys():
-            data['time'] = datetime.datetime.utcnow().strftime(TIMESTAMP_FORMAT)
+        if "time" not in data.keys():
+            data["time"] = datetime.datetime.utcnow().strftime(TIMESTAMP_FORMAT)
 
         async with self.lock:
             if self.open_time is None:
@@ -70,7 +74,7 @@ class Dumper:
                 await self._new_file()
 
             # Dump to file
-            with open(self.open_file, 'a') as dump_file:
+            with open(self.open_file, "a") as dump_file:
                 json.dump(data, dump_file)
-                dump_file.write('\n')
+                dump_file.write("\n")
                 dump_file.flush()
