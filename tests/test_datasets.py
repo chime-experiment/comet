@@ -15,12 +15,8 @@ from chimedb.dataset import get_state, get_dataset, get_types
 import chimedb.core as chimedb
 from comet.manager import TIMESTAMP_FORMAT
 
-CHIMEDBRC = os.path.join(os.getcwd() + "/.chimedbrc")
-CHIMEDBRC_MESSAGE = (
-    "Could not find {}. It is important that this test uses this "
-    "file to connect to a dummy database. Otherwise it could write "
-    "into a production database.".format(CHIMEDBRC)
-)
+CHIMEDBRC = os.path.join(os.getcwd() + "/.chimedb_test_rc")
+CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 
 # Some dummy states for testing:
 CONFIG = {"a": 1, "b": "fubar"}
@@ -54,9 +50,12 @@ def manager():
 
 @pytest.fixture(scope="session", autouse=True)
 def broker():
-    # Make sure we don't write to the actual chime database
+    # Tell chimedb where the database connection config is
     assert os.path.isfile(CHIMEDBRC), CHIMEDBRC_MESSAGE
-    os.environ["CHIMEDBRC"] = CHIMEDBRC
+    os.environ["CHIMEDB_TEST_RC"] = CHIMEDBRC
+
+    # Make sure we don't write to the actual chime database
+    os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
     broker = Popen(["comet", "--debug", "1", "-d", dir, "-t", "2"])
     time.sleep(3)
@@ -167,9 +166,12 @@ def test_archiver(archiver, simple_ds, manager):
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
 
-    # Make sure we don't write to the actual chime database
+    # Tell chimedb where the database connection config is
     assert os.path.isfile(CHIMEDBRC), CHIMEDBRC_MESSAGE
-    os.environ["CHIMEDBRC"] = CHIMEDBRC
+    os.environ["CHIMEDB_TEST_RC"] = CHIMEDBRC
+
+    # Make sure we don't write to the actual chime database
+    os.environ["CHIMEDB_TEST_ENABLE"] = "foo"
 
     # Open database connection
     chimedb.connect()
