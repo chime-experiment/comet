@@ -21,9 +21,11 @@ TIMESTAMP_FORMAT = "%Y-%m-%d-%H:%M:%S.%f"
 
 TIMEOUT = 60
 
+
 def stopwatch(func):
     """Decorate function to time the duration of an event for locus testing.
     """
+
     def wrapper(*args, **kwargs):
         # get task's function name
         previous_frame = inspect.currentframe().f_back
@@ -35,18 +37,24 @@ def stopwatch(func):
             result = func(*args, **kwargs)
         except Exception as e:
             total = int((time.time() - start) * 1000)
-            events.request_failure.fire(request_type="DummyClient",
-                                        name = task_name,
-                                        response_time = total,
-                                        exception=e)
+            events.request_failure.fire(
+                request_type="DummyClient",
+                name=task_name,
+                response_time=total,
+                exception=e,
+            )
         else:
             total = int((time.time() - start) * 1000)
-            events.request_success.fire(request_type="DummyClient",
-                                        name=task_name,
-                                        response_time=total,
-                                        response_length=0)
+            events.request_success.fire(
+                request_type="DummyClient",
+                name=task_name,
+                response_time=total,
+                response_length=0,
+            )
         return result
+
     return wrapper
+
 
 class DummyClient:
     """
@@ -74,7 +82,7 @@ class DummyClient:
 
     @stopwatch
     def register_start(self, start_time, version):
-            '''Register a startup with the broker.
+        """Register a startup with the broker.
 
             This should just be called once on start.
             This needs to be called on start.
@@ -97,53 +105,53 @@ class DummyClient:
                 If there was an error in registering stuff with the broker.
             :class:`ConnectionError`
                 If the broker can't be reached.
-            '''
+            """
 
-            if not isinstance(start_time, datetime.datetime):
-                raise ManagerError(
-                        "start_time needs to be of type `datetime.datetime` (is {}).".format(
-                            type(start_time).__name__
-                        )
-                    )
-            if not isinstance(version, str):
-                raise ManagerError(
-                        "version needs to be of type 'str' (is {}).".format(
-                            type(start_time).__name__
-                        )
-                    )
-            if self.start_state:
-                raise ManagerError(
-                        "A startup was already registered, this can only be done once."
-                        )
+        if not isinstance(start_time, datetime.datetime):
+            raise ManagerError(
+                "start_time needs to be of type `datetime.datetime` (is {}).".format(
+                    type(start_time).__name__
+                )
+            )
+        if not isinstance(version, str):
+            raise ManagerError(
+                "version needs to be of type 'str' (is {}).".format(
+                    type(start_time).__name__
+                )
+            )
+        if self.start_state:
+            raise ManagerError(
+                "A startup was already registered, this can only be done once."
+            )
 
-            # generate name for registering
-            self.name = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
-            print("Registering startup for {}.".format(self.name))
+        # generate name for registering
+        self.name = "".join(random.choice(string.ascii_lowercase) for i in range(10))
+        print("Registering startup for {}.".format(self.name))
 
-            state = {
-                    "time": start_time.strftime(TIMESTAMP_FORMAT),
-                    "version": version,
-                    "type": "start_{}".format(self.name),
-                    }
-            state_id = self._make_hash(state)
+        state = {
+            "time": start_time.strftime(TIMESTAMP_FORMAT),
+            "version": version,
+            "type": "start_{}".format(self.name),
+        }
+        state_id = self._make_hash(state)
 
-            request = {"hash": state_id}
-            reply = self._send(REGISTER_STATE, request)
+        request = {"hash": state_id}
+        reply = self._send(REGISTER_STATE, request)
 
-            # Does the broker as for the state?
-            if reply.get("request") == "get_state":
-                if reply.get("hash") != state_id:
-                    raise BrokerError(
-                        "The broker is asking for state {} when state {} (start) was "
-                        "registered.".format(reply.get("hash"), state_id)
-                    )
-                self._send_state(state_id, state)
+        # Does the broker as for the state?
+        if reply.get("request") == "get_state":
+            if reply.get("hash") != state_id:
+                raise BrokerError(
+                    "The broker is asking for state {} when state {} (start) was "
+                    "registered.".format(reply.get("hash"), state_id)
+                )
+            self._send_state(state_id, state)
 
-            self.states[state_id] = state
-            self.start_state = state_id
-            self.state_reg_time[state_id] = datetime.datetime.utcnow()
+        self.states[state_id] = state
+        self.start_state = state_id
+        self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
-            return
+        return
 
     @stopwatch
     def register_config(self, config):
@@ -173,7 +181,9 @@ class DummyClient:
                 )
             )
         if not self.start_state:
-            raise ManagerError("Start has to be registered before config (use 'register_start()').")
+            raise ManagerError(
+                "Start has to be registered before config (use 'register_start()')."
+            )
 
         print("Registering config for {}.".format(self.name))
 
@@ -188,7 +198,11 @@ class DummyClient:
         # Does the broker ask for the state?
         if reply.get("request") == "get_state":
             if reply.get("hash") != state_id:
-                raise BrokerError("The broker is asking for state {} when state {} (config) was registered.".format(reply.get("hash"), state_id))
+                raise BrokerError(
+                    "The broker is asking for state {} when state {} (config) was registered.".format(
+                        reply.get("hash"), state_id
+                    )
+                )
             self._send_state(state_id, state)
 
         self.states[state_id] = state
@@ -199,9 +213,9 @@ class DummyClient:
 
     @stopwatch
     def register_state(
-            self, state, state_type, dump=True, timestamp=None, state_id=None
+        self, state, state_type, dump=True, timestamp=None, state_id=None
     ):
-        '''Register a state with the broker.
+        """Register a state with the broker.
 
         This does not attach the state to a dataset.
 
@@ -229,15 +243,13 @@ class DummyClient:
         :class:`ConnectionError`
             If the broker can't be reached
 
-        '''
+        """
         if not (isinstance(state, dict) or state is None):
             raise ManagerError(
                 "state needs to be a dictionary (is `{}`).".format(type(state).__name__)
             )
         if not self.start_state:
-            raise ManagerError(
-                    "Start has to be registered before anything else"
-                    )
+            raise ManagerError("Start has to be registered before anything else")
 
         state = copy.deepcopy(state)
 
@@ -257,8 +269,10 @@ class DummyClient:
         if reply.get("request") == "get_state":
             if reply.get("hash") != state_id:
                 raise BrokerError(
-                        "The broker is asking for state {} when state {} ({}) was registered.".format(reply.get("hash"), state_id, state_type)
-                        )
+                    "The broker is asking for state {} when state {} ({}) was registered.".format(
+                        reply.get("hash"), state_id, state_type
+                    )
+                )
             self._send_state(state_id, state, dump)
 
         self.states[state_id] = state
@@ -283,8 +297,8 @@ class DummyClient:
 
     @stopwatch
     def register_dataset(
-            self, state, base_ds, types, root=False, dump=True, timestamp=None, ds_id=None
-            ):
+        self, state, base_ds, types, root=False, dump=True, timestamp=None, ds_id=None
+    ):
         """Register a dataset with the broker.
 
         Parameters
@@ -318,9 +332,7 @@ class DummyClient:
                 "state needs to be a hash (int) (is `{}`).".format(type(state).__name__)
             )
         if not self.start_state:
-            raise ManagerError(
-                "Start has to be registered before anything else"
-            )
+            raise ManagerError("Start has to be registered before anything else")
 
         ds = {"is_root": root, "state": state, "types": types}
         if base_ds is not None:
@@ -339,9 +351,7 @@ class DummyClient:
         return ds_id
 
     @stopwatch
-    def update_datasets(
-            self, ds_id, timestamp=0, roots=[]
-        ):
+    def update_datasets(self, ds_id, timestamp=0, roots=[]):
         """Queries for an update on the dataset.
 
         Requests all nodes that were after the given timestamp.
@@ -363,17 +373,13 @@ class DummyClient:
             )
 
         if not self.start_state:
-            raise ManagerError(
-                "Start has to be registered before anything else"
-            )
-
+            raise ManagerError("Start has to be registered before anything else")
 
         request = {"ds_id": ds_id, "ts": timestamp, "roots": roots}
 
         response = self._send(UPDATE_DATASETS, request)
 
         return response
-
 
     @staticmethod
     def _make_hash(data):
@@ -383,13 +389,21 @@ class DummyClient:
         command = getattr(requests, rtype)
         try:
             reply = command(
-                    self.broker + endpoint, data=json.dumps(data), timeout=TIMEOUT)
+                self.broker + endpoint, data=json.dumps(data), timeout=TIMEOUT
+            )
             reply.raise_for_status()
         except requests.exceptions.ConnectionError:
-            raise BrokerError("Failure connecting to comet.broker at {}{}: make sure it is running".format(self.broker, endpoint)
-                    )
+            raise BrokerError(
+                "Failure connecting to comet.broker at {}{}: make sure it is running".format(
+                    self.broker, endpoint
+                )
+            )
         except requests.exceptions.ReadTimeout:
-            raise BrokerError("Timeout when connecting to comet.broker at {}{}: make sure it is running.".format(self.broker, endpoint))
+            raise BrokerError(
+                "Timeout when connecting to comet.broker at {}{}: make sure it is running.".format(
+                    self.broker, endpoint
+                )
+            )
 
         reply = reply.json()
         self._check_result(reply.get("result"), endpoint)
@@ -397,8 +411,11 @@ class DummyClient:
 
     def _check_result(self, result, endpoint):
         if result != "success":
-            raise BrokerError("The {}{} answered with result `{}`, expected 'success'.".format(self.broker, endpoint, result))
-
+            raise BrokerError(
+                "The {}{} answered with result `{}`, expected 'success'.".format(
+                    self.broker, endpoint, result
+                )
+            )
 
     def _send_state(self, state_id, state, dump=True):
         print("sending state {}".format(state_id))

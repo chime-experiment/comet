@@ -24,8 +24,8 @@ now = datetime.datetime.utcnow()
 version = "0.1.1"
 directory = tempfile.mkdtemp()
 
-class MyTasks(TaskSet):
 
+class MyTasks(TaskSet):
     def on_start(self):
         self.client.register_start(now, version)
         self.client.register_config(CONFIG)
@@ -58,6 +58,7 @@ class MyTasks(TaskSet):
             state_id = random.choice(list(self.client.states.keys()))
             self.client.request_state(state_id)
 
+
 class DummyManager(DummyClientLocust):
     host = "localhost"
     port = PORT
@@ -71,7 +72,9 @@ class DummyManager(DummyClientLocust):
         # Make sure that we don't write to the actual chime database
         os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
-        self.broker = Popen(["comet", "--debug", "1", "-d", directory, "-t", "2", "-p", PORT])
+        self.broker = Popen(
+            ["comet", "--debug", "1", "-d", directory, "-t", "2", "-p", PORT]
+        )
         time.sleep(5)
 
     def teardown(self):
@@ -82,5 +85,3 @@ class DummyManager(DummyClientLocust):
         # Give the broker a moment to delete the .lock file
         time.sleep(0.1)
         shutil.rmtree(directory)
-
-
