@@ -1,3 +1,5 @@
+"""DummyClient for locust testing CoMeT broker."""
+
 import time
 import inspect
 import random
@@ -23,8 +25,7 @@ TIMEOUT = 60
 
 
 def stopwatch(func):
-    """Decorate function to time the duration of an event for locus testing.
-    """
+    """Decorate function to time the duration of an event for locus testing."""
 
     def wrapper(*args, **kwargs):
         # get task's function name
@@ -58,13 +59,13 @@ def stopwatch(func):
 
 class DummyClient:
     """
-    Dummy Client that interfaces with the CoMeT dataset broker,
+    Dummy Client that interfaces with the CoMeT dataset broker.
 
     Used for locust load testing.
     """
 
     def __init__(self, broker_host, broker_port):
-        """Sets up the CoMeT Dummy Client.
+        """Set up the CoMeT Dummy Client.
 
         Parameters
         ----------
@@ -84,28 +85,28 @@ class DummyClient:
     def register_start(self, start_time, version):
         """Register a startup with the broker.
 
-            This should just be called once on start.
-            This needs to be called on start.
+        This should just be called once on start.
+        This needs to be called on start.
 
-            Parameters
-            ----------
-            start_time : :class:`datetime.datetime`
-                The time in UTC when the program was started.
-            version : str
-                A unique string identifying the version of the software. This should include version
-                tags, and if applicable git commit hashes as well as the "dirty" state of the local
-                working tree.
+        Parameters
+        ----------
+        start_time : :class:`datetime.datetime`
+            The time in UTC when the program was started.
+        version : str
+            A unique string identifying the version of the software. This should include version
+            tags, and if applicable git commit hashes as well as the "dirty" state of the local
+            working tree.
 
-            Raises
-            ------
-            :class:`ManagerError`
-                If there was an internal error in the dataset management. E.g. if this was called
-                already before. This is to register a startup. Once.
-            :class:`BrokerError`
-                If there was an error in registering stuff with the broker.
-            :class:`ConnectionError`
-                If the broker can't be reached.
-            """
+        Raises
+        ------
+        :class:`ManagerError`
+            If there was an internal error in the dataset management. E.g. if this was called
+            already before. This is to register a startup. Once.
+        :class:`BrokerError`
+            If there was an error in registering stuff with the broker.
+        :class:`ConnectionError`
+            If the broker can't be reached.
+        """
 
         if not isinstance(start_time, datetime.datetime):
             raise ManagerError(
@@ -155,7 +156,7 @@ class DummyClient:
 
     @stopwatch
     def register_config(self, config):
-        """Registers a static config with the broker.
+        """Register a static config with the broker.
 
         This should just be called once on start.
 
@@ -283,7 +284,7 @@ class DummyClient:
     @stopwatch
     def request_state(self, state):
         """
-        Request the state with the given ID
+        Request the state with the given ID.
 
         Parameters
         ----------
@@ -352,7 +353,7 @@ class DummyClient:
 
     @stopwatch
     def update_datasets(self, ds_id, timestamp=0, roots=[]):
-        """Queries for an update on the dataset.
+        """Query for an update on the dataset.
 
         Requests all nodes that were after the given timestamp.
 
@@ -425,6 +426,11 @@ class DummyClient:
 
 
 class DummyClientLocust(Locust):
+    """
+    Dummy Client Locust class. Contains DummyClient client.
+
+    Used for locust load testing.
+    """
     def __init__(self):
         self.client = DummyClient(self.host, self.port)
         super(DummyClientLocust, self).__init__()
