@@ -14,8 +14,8 @@ from DummyClient import DummyClientLocust
 
 from subprocess import Popen
 
-CHIMEDBRC = os.path.join(os.getcwd() + ".chimedb_test_rc")
-COMETTESTDATA = os.path.join(os.getcwd() + "comet-data")
+CHIMEDBRC = os.path.join(os.getcwd(), "tests/.chimedb_test_rc")
+COMETTESTDATA = os.path.join(os.getcwd(), "comet-data")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
@@ -46,11 +46,17 @@ class MyTasks(TaskSet):
         state_id = self.client.register_state({"foo": "bar"}, "test")
         dset_id = self.client.register_dataset(state_id, None, ["test"], True)
 
-    @task(1)
+    @task(2)
     def update_dataset(self):
         if self.client.datasets:
             ds_id = random.choice(list(self.client.datasets.keys()))
             self.client.update_datasets(ds_id)
+
+    @task(2)
+    def request_state(self):
+        if self.client.states:
+            state_id = random.choice(list(self.client.states.keys()))
+            self.client.request_state(state_id)
 
 class DummyManager(DummyClientLocust):
     host = "localhost"
