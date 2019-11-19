@@ -77,9 +77,8 @@ class DummyClient:
         self.broker = "http://{}:{}".format(broker_host, broker_port)
 
         self.start_state = None
-        self.states = dict()
-        self.state_reg_time = dict()
-        self.datasets = dict()
+        self.states = list()
+        self.datasets = list()
 
     @stopwatch
     def register_start(self, start_time, version):
@@ -148,9 +147,8 @@ class DummyClient:
                 )
             self._send_state(state_id, state)
 
-        self.states[state_id] = state
+        self.states.append(state_id)
         self.start_state = state_id
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         return
 
@@ -206,9 +204,8 @@ class DummyClient:
                 )
             self._send_state(state_id, state)
 
-        self.states[state_id] = state
+        self.states.append(state_id)
         self.config_state = state_id
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         return
 
@@ -276,8 +273,7 @@ class DummyClient:
                 )
             self._send_state(state_id, state, dump)
 
-        self.states[state_id] = state
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
+        self.states.append(state_id)
 
         return state_id
 
@@ -347,7 +343,7 @@ class DummyClient:
             request["time"] = timestamp
         self._send(REGISTER_DATASET, request)
 
-        self.datasets[ds_id] = ds
+        self.datasets.append(ds_id)
 
         return ds_id
 
@@ -407,7 +403,6 @@ class DummyClient:
             )
 
         reply = reply.json()
-        self._check_result(reply.get("result"), endpoint)
         return reply
 
     def _check_result(self, result, endpoint):

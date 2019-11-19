@@ -49,13 +49,13 @@ class MyTasks(TaskSet):
     @task(2)
     def update_dataset(self):
         if self.client.datasets:
-            ds_id = random.choice(list(self.client.datasets.keys()))
+            ds_id = random.choice(list(self.client.datasets))
             self.client.update_datasets(ds_id)
 
     @task(2)
     def request_state(self):
         if self.client.states:
-            state_id = random.choice(list(self.client.states.keys()))
+            state_id = random.choice(list(self.client.states))
             self.client.request_state(state_id)
 
 
