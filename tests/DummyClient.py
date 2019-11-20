@@ -426,6 +426,7 @@ class DummyClientLocust(Locust):
 
     Used for locust load testing.
     """
+
     def __init__(self):
         self.client = DummyClient(self.host, self.port)
         super(DummyClientLocust, self).__init__()
