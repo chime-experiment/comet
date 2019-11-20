@@ -27,21 +27,21 @@ directory = tempfile.mkdtemp()
 class MyTasks(TaskSet):
     def on_start(self):
         self.states = os.listdir(COMETTESTDATA)
+        # register root dataset
+        state_id = self.client.register_state({"foo": "bar"}, "test")
+        dset_id = self.client.register_dataset(state_id, None, "test", True)
+        self.curr_base = dset_id
 
     @task(3)
-    def complex_ds(self):
+    def register_dataset(self):
         state_file = os.path.join(COMETTESTDATA, random.choice(self.states))
         with open(state_file) as sf:
             states_sf = sf.readlines()
             state = json.loads(random.choice(states_sf))
 
         state_id = self.client.register_state(state, "test")
-        self.client.register_dataset(state_id, None, "test", True)
-
-    @task(1)
-    def simple_ds(self):
-        state_id = self.client.register_state({"foo": "bar"}, "test")
-        dset_id = self.client.register_dataset(state_id, None, "test", True)
+        dset_id = self.client.register_dataset(state_id, self.curr_base, "test", False)
+        self.curr_base = dset_id
 
     @task(2)
     def update_dataset(self):
