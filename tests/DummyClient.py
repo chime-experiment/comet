@@ -76,13 +76,12 @@ class DummyClient:
             Dataset broker port.
         """
         self.broker = "http://{}:{}".format(broker_host, broker_port)
-
         self.states = list()
         self.datasets = list()
 
     @stopwatch
     def register_state(
-        self, state, state_type, dump=True, timestamp=None, state_id=None
+        self, state, state_type
     ):
         """Register a state with the broker.
 
@@ -93,15 +92,6 @@ class DummyClient:
         state : dict
             The state should be a JSON-serializable dictionary.
         state_type : str
-            The name of the state type (e.g. "inputs", "metadata").
-        dump : bool
-            Tells the broker if the state should be dumped to file or not.
-        timestamp : str
-            Overwrite the timestamp attached to this state. Should have the format
-            `DummyClient.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
-            time.
-        state_id : int
-            Manually set the hash of this sate instead of letting comet compute it.
 
         Raises
         ------
@@ -113,57 +103,43 @@ class DummyClient:
             If the broker can't be reached
 
         """
-        if not (isinstance(state, dict) or state is None):
-            raise ManagerError(
-                "state needs to be a dictionary (is `{}`).".format(type(state).__name__)
-            )
 
         state = copy.deepcopy(state)
 
         if state_type:
             state["type"] = state_type
-        elif state:
-            state_type = state["type"]
-        if state_id is None:
-            state_id = self._make_hash(state)
 
-        request = {"hash": state_id, "dump": dump}
-        if timestamp:
-            request["time"] = timestamp
+        state_id = self._make_hash(state)
+
+        request = {"hash": state_id, "dump": True}
         reply = self._send(REGISTER_STATE, request)
 
         # Does the broker ask for the state?
         if reply.get("request") == "get_state":
-            if reply.get("hash") != state_id:
-                raise BrokerError(
-                    "The broker is asking for state {} when state {} ({}) was registered.".format(
-                        reply.get("hash"), state_id, state_type
-                    )
-                )
-            self._send_state(state_id, state, dump)
+            self._send_state(state_id, state, request["dump"])
 
         self.states.append(state_id)
 
         return state_id
 
     @stopwatch
-    def request_state(self, state):
+    def request_state(self, state_id):
         """
         Request the state with the given ID.
 
         Parameters
         ----------
-        state : int
+        state : str
             Hash / state ID of the state info is requested on
         """
-        request = {"id": state}
+        request = {"id": state_id}
         reply = self._send(REQUEST_STATE, request)
 
         return
 
     @stopwatch
     def register_dataset(
-        self, state, base_ds, state_type, root=False, dump=True, timestamp=None, ds_id=None
+        self, state, base_ds, state_type, root=False,
     ):
         """Register a dataset with the broker.
 
@@ -177,12 +153,6 @@ class DummyClient:
             State type name of this state.
         root : bool
             `True` if this is a root dataset (default `False`).
-        dump : bool
-            Tells the broker if the state should be dumped to file or not.
-        timestamp : str
-            Overwrite the timestamp attached to this dataset. Should have the format `DummyClient.TIMESTAMP_FORMAT`.
-        ds_id : int
-            Manually set the hash of this dataset instead of letting CoMeT compute it.
 
         Raises
         ------
@@ -193,21 +163,14 @@ class DummyClient:
         :class:`ConnectionError`
             If the broker can't be reached.
         """
-        if not isinstance(state, str):
-            raise ManagerError(
-                "state needs to be a hash (str) (is `{0}`).".format(type(state).__name__)
-            )
-
         ds = {"is_root": root, "state": state, "type": state_type}
+
         if base_ds is not None:
             ds["base_dset"] = base_ds
 
-        if ds_id is None:
-            ds_id = self._make_hash(ds)
+        ds_id = self._make_hash(ds)
 
-        request = {"hash": ds_id, "ds": ds, "dump": dump}
-        if timestamp:
-            request["time"] = timestamp
+        request = {"hash": ds_id, "ds": ds, "dump": True}
         self._send(REGISTER_DATASET, request)
 
         self.datasets.append(ds_id)
@@ -231,11 +194,6 @@ class DummyClient:
             Hash for the given roots that are included in the returned update.
             If the root of the given dataset is not among them, all datasets with the same root as the given dataset are returned.
         """
-        if not isinstance(ds_id, str):
-            raise ManagerError(
-                "ds_id needs to be a hash (str) (is `{0}`).".format(type(ds_id).__name__)
-            )
-
 
         request = {"ds_id": ds_id, "ts": timestamp, "roots": roots}
 
