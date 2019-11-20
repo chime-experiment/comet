@@ -80,9 +80,7 @@ class DummyClient:
         self.datasets = list()
 
     @stopwatch
-    def register_state(
-        self, state, state_type
-    ):
+    def register_state(self, state, state_type):
         """Register a state with the broker.
 
         This does not attach the state to a dataset.
@@ -138,9 +136,7 @@ class DummyClient:
         return
 
     @stopwatch
-    def register_dataset(
-        self, state, base_ds, state_type, root=False,
-    ):
+    def register_dataset(self, state, base_ds, state_type, root=False):
         """Register a dataset with the broker.
 
         Parameters
