@@ -77,138 +77,8 @@ class DummyClient:
         """
         self.broker = "http://{}:{}".format(broker_host, broker_port)
 
-        self.start_state = None
         self.states = list()
         self.datasets = list()
-
-    @stopwatch
-    def register_start(self, start_time, version):
-        """Register a startup with the broker.
-
-        This should just be called once on start.
-        This needs to be called on start.
-
-        Parameters
-        ----------
-        start_time : :class:`datetime.datetime`
-            The time in UTC when the program was started.
-        version : str
-            A unique string identifying the version of the software. This should include version
-            tags, and if applicable git commit hashes as well as the "dirty" state of the local
-            working tree.
-
-        Raises
-        ------
-        :class:`ManagerError`
-            If there was an internal error in the dataset management. E.g. if this was called
-            already before. This is to register a startup. Once.
-        :class:`BrokerError`
-            If there was an error in registering stuff with the broker.
-        :class:`ConnectionError`
-            If the broker can't be reached.
-        """
-
-        if not isinstance(start_time, datetime.datetime):
-            raise ManagerError(
-                "start_time needs to be of type `datetime.datetime` (is {}).".format(
-                    type(start_time).__name__
-                )
-            )
-        if not isinstance(version, str):
-            raise ManagerError(
-                "version needs to be of type 'str' (is {}).".format(
-                    type(start_time).__name__
-                )
-            )
-        if self.start_state:
-            raise ManagerError(
-                "A startup was already registered, this can only be done once."
-            )
-
-        # generate name for registering
-        self.name = "".join(random.choice(string.ascii_lowercase) for i in range(10))
-        print("Registering startup for {}.".format(self.name))
-
-        state = {
-            "time": start_time.strftime(TIMESTAMP_FORMAT),
-            "version": version,
-            "type": "start_{}".format(self.name),
-        }
-        state_id = self._make_hash(state)
-
-        request = {"hash": state_id}
-        reply = self._send(REGISTER_STATE, request)
-
-        # Does the broker as for the state?
-        if reply.get("request") == "get_state":
-            if reply.get("hash") != state_id:
-                raise BrokerError(
-                    "The broker is asking for state {} when state {} (start) was "
-                    "registered.".format(reply.get("hash"), state_id)
-                )
-            self._send_state(state_id, state)
-
-        self.states.append(state_id)
-        self.start_state = state_id
-
-        return
-
-    @stopwatch
-    def register_config(self, config):
-        """Register a static config with the broker.
-
-        This should just be called once on start.
-
-        Parameters
-        ----------
-        config : dict
-            The config should be JSON-serializable, preferably a dictionary.
-
-        Raises
-        ------
-        :class:`ManagerError`
-            If there was an internal error in the dataset management.
-        :class:`BrokerError`
-            If there was an error in registering stuff with the broker.
-        :class:`ConnectionError`
-            If the broker can't be reached
-
-        """
-        if not isinstance(config, dict):
-            raise ManagerError(
-                "config needs to be a dictionary (is `{}`).".format(
-                    type(config).__name__
-                )
-            )
-        if not self.start_state:
-            raise ManagerError(
-                "Start has to be registered before config (use 'register_start()')."
-            )
-
-        print("Registering config for {}.".format(self.name))
-
-        state = copy.deepcopy(config)
-
-        state["type"] = "config_{}".format(self.name)
-        state_id = self._make_hash(state)
-
-        request = {"hash": state_id}
-        reply = self._send(REGISTER_STATE, request)
-
-        # Does the broker ask for the state?
-        if reply.get("request") == "get_state":
-            if reply.get("hash") != state_id:
-                raise BrokerError(
-                    "The broker is asking for state {} when state {} (config) was registered.".format(
-                        reply.get("hash"), state_id
-                    )
-                )
-            self._send_state(state_id, state)
-
-        self.states.append(state_id)
-        self.config_state = state_id
-
-        return
 
     @stopwatch
     def register_state(
@@ -247,8 +117,6 @@ class DummyClient:
             raise ManagerError(
                 "state needs to be a dictionary (is `{}`).".format(type(state).__name__)
             )
-        if not self.start_state:
-            raise ManagerError("Start has to be registered before anything else")
 
         state = copy.deepcopy(state)
 
@@ -329,8 +197,6 @@ class DummyClient:
             raise ManagerError(
                 "state needs to be a hash (str) (is `{0}`).".format(type(state).__name__)
             )
-        if not self.start_state:
-            raise ManagerError("Start has to be registered before anything else")
 
         ds = {"is_root": root, "state": state, "type": state_type}
         if base_ds is not None:
@@ -370,8 +236,6 @@ class DummyClient:
                 "ds_id needs to be a hash (str) (is `{0}`).".format(type(ds_id).__name__)
             )
 
-        if not self.start_state:
-            raise ManagerError("Start has to be registered before anything else")
 
         request = {"ds_id": ds_id, "ts": timestamp, "roots": roots}
 

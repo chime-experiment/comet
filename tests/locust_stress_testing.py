@@ -19,7 +19,6 @@ COMETTESTDATA = os.path.join(os.getcwd(), "comet-data")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
-CONFIG = {"a": 1, "b": "fubar"}
 now = datetime.datetime.utcnow()
 version = "0.1.1"
 directory = tempfile.mkdtemp()
@@ -27,8 +26,6 @@ directory = tempfile.mkdtemp()
 
 class MyTasks(TaskSet):
     def on_start(self):
-        self.client.register_start(now, version)
-        self.client.register_config(CONFIG)
         self.states = os.listdir(COMETTESTDATA)
 
     @task(3)
