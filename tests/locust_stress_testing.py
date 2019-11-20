@@ -39,12 +39,12 @@ class MyTasks(TaskSet):
             state = json.loads(random.choice(states_sf))
 
         state_id = self.client.register_state(state, "test")
-        self.client.register_dataset(state_id, None, ["test"], True)
+        self.client.register_dataset(state_id, None, "test", True)
 
     @task(1)
     def simple_ds(self):
         state_id = self.client.register_state({"foo": "bar"}, "test")
-        dset_id = self.client.register_dataset(state_id, None, ["test"], True)
+        dset_id = self.client.register_dataset(state_id, None, "test", True)
 
     @task(2)
     def update_dataset(self):

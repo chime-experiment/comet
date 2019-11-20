@@ -9,6 +9,7 @@ import copy
 
 import requests
 import datetime
+import mmh3
 from locust import events, Locust
 
 from comet import CometError, ManagerError, BrokerError
@@ -294,7 +295,7 @@ class DummyClient:
 
     @stopwatch
     def register_dataset(
-        self, state, base_ds, types, root=False, dump=True, timestamp=None, ds_id=None
+        self, state, base_ds, state_type, root=False, dump=True, timestamp=None, ds_id=None
     ):
         """Register a dataset with the broker.
 
@@ -304,8 +305,8 @@ class DummyClient:
             Hash / state ID of the state attached to this dataset.
         base_ds : int
             Hash / dataset ID of the base dataset or `None` if this is a root dataset.
-        types : list of str
-            State type name(s) of this state and its inner state(s).
+        state_type : str
+            State type name of this state.
         root : bool
             `True` if this is a root dataset (default `False`).
         dump : bool
@@ -324,14 +325,14 @@ class DummyClient:
         :class:`ConnectionError`
             If the broker can't be reached.
         """
-        if not isinstance(state, int):
+        if not isinstance(state, str):
             raise ManagerError(
-                "state needs to be a hash (int) (is `{}`).".format(type(state).__name__)
+                "state needs to be a hash (str) (is `{0}`).".format(type(state).__name__)
             )
         if not self.start_state:
             raise ManagerError("Start has to be registered before anything else")
 
-        ds = {"is_root": root, "state": state, "types": types}
+        ds = {"is_root": root, "state": state, "type": state_type}
         if base_ds is not None:
             ds["base_dset"] = base_ds
 
@@ -364,9 +365,9 @@ class DummyClient:
             Hash for the given roots that are included in the returned update.
             If the root of the given dataset is not among them, all datasets with the same root as the given dataset are returned.
         """
-        if not isinstance(ds_id, int):
+        if not isinstance(ds_id, str):
             raise ManagerError(
-                "ds_id needs to be a hash (int) (is `{}`).".format(type(state).__name__)
+                "ds_id needs to be a hash (str) (is `{0}`).".format(type(ds_id).__name__)
             )
 
         if not self.start_state:
@@ -380,7 +381,7 @@ class DummyClient:
 
     @staticmethod
     def _make_hash(data):
-        return hash(json.dumps(data, sort_keys=True))
+        return mmh3.hash_bytes(json.dumps(data, sort_keys=True)).hex()
 
     def _send(self, endpoint, data, rtype="post"):
         command = getattr(requests, rtype)
