@@ -15,41 +15,71 @@ from DummyClient import DummyClientLocust
 from subprocess import Popen
 
 CHIMEDBRC = os.path.join(os.getcwd(), "tests/.chimedb_test_rc")
-COMETTESTDATA = os.path.join(os.getcwd(), "comet-data")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
-now = datetime.datetime.utcnow()
 version = "0.1.1"
 directory = tempfile.mkdtemp()
+
+large_data = []
+for i in range(2035):
+    for j in range(0, 2035):
+        large_data.append([i, j])
+
+
+def make_small_state():
+    return {"state": {"time": str(datetime.datetime.utcnow()),
+                        "type": "start_comet.broker"
+                    },
+
+            "hash": random.getrandbits(40)
+            }
+
+
+def make_large_state():
+    state = {"state": {
+                    "inner": {
+                        "data": large_data
+                        }
+                    },
+            "hash":random.getrandbits(40)
+
+        }
+
+    return state
+
 
 
 class MyTasks(TaskSet):
     def on_start(self):
-        self.states = os.listdir(COMETTESTDATA)
         # register root dataset
         state_id = self.client.register_state({"foo": "bar"}, "test")
         dset_id = self.client.register_dataset(state_id, None, "test", True)
         self.curr_base = dset_id
 
-    @task(3)
-    def register_dataset(self):
-        state_file = os.path.join(COMETTESTDATA, random.choice(self.states))
-        with open(state_file) as sf:
-            states_sf = sf.readlines()
-            state = json.loads(random.choice(states_sf))
+    @task(5)
+    def register_small_dataset(self):
+        state = make_small_state()
 
         state_id = self.client.register_state(state, "test")
         dset_id = self.client.register_dataset(state_id, self.curr_base, "test", False)
         self.curr_base = dset_id
 
-    @task(2)
+    @task(1)
+    def register_large_dataset(self):
+        state = make_large_state()
+
+        state_id = self.client.register_state(state, "test")
+        dset_id = self.client.register_dataset(state_id, self.curr_base, "test", False)
+        self.curr_base = dset_id
+
+    @task(4)
     def update_dataset(self):
         if self.client.datasets:
             ds_id = random.choice(list(self.client.datasets))
             self.client.update_datasets(ds_id)
 
-    @task(2)
+    @task(4)
     def request_state(self):
         if self.client.states:
             state_id = random.choice(list(self.client.states))

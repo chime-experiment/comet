@@ -37,6 +37,7 @@ before_install:
     - pip install pydocstyle
     - pip install pytest
     - pip install pytest-asyncio
+    - pip install locust
     - pip install future  # FIXME: somehow this doesn't get installed as a dependency of caput
 
 install:
@@ -59,3 +60,6 @@ script:
     # Clone kotekan and run some of its tests
     - ./kotetest.sh
     - ccache -s || true
+
+    # run locust stress tests
+    - locust -f locust_stress_testing.py --no-web -c 200 -r 10 --run-time 10m

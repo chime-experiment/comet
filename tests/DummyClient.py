@@ -102,8 +102,6 @@ class DummyClient:
 
         """
 
-        state = copy.deepcopy(state)
-
         if state_type:
             state["type"] = state_type
 
