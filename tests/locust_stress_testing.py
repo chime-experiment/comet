@@ -19,7 +19,6 @@ CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
 version = "0.1.1"
-directory = tempfile.mkdtemp()
 
 large_data = []
 for i in range(2035):
@@ -93,7 +92,7 @@ class DummyManager(DummyClientLocust):
         os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
         self.broker = Popen(
-            ["comet", "--debug", "1", "-d", directory, "-t", "2", "-p", PORT]
+            ["comet", "--debug", "1", "-t", "2", "-p", PORT]
         )
         time.sleep(5)
 
@@ -104,4 +103,3 @@ class DummyManager(DummyClientLocust):
 
         # Give the broker a moment to delete the .lock file
         time.sleep(0.1)
-        shutil.rmtree(directory)
