@@ -28,6 +28,7 @@ PORT = "8000"
 HOST = "localhost"
 version = "0.1.1"
 
+
 def make_small_state():
     """Build a small state for sample_data."""
     return {
@@ -37,6 +38,7 @@ def make_small_state():
         },
         "hash": random.getrandbits(40),
     }
+
 
 large_data = []
 for i in range(2035):

@@ -50,7 +50,7 @@ before_script:
 script:
     # Run pycodestyle on all .py files in all subfolders
     - black --check .
-    - find . -type d -o ! -name versioneer.py ! test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
+    - find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
 
     # Run tests
     - export PYTHONPATH=.:$PYTHONPATH
