@@ -91,8 +91,10 @@ class DummyManager(DummyClientLocust):
         # Make sure that we don't write to the actual chime database
         os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
+        # TravisCI has 2 cores available
+        # change the -w flag to (# of cores available - 1)
         self.broker = Popen(
-            ["comet", "--debug", "1", "-t", "2", "-p", PORT]
+            ["comet", "--debug", "0", "-t", "2", "-p", PORT, '-w', '1']
         )
         time.sleep(5)
 
