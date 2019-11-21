@@ -14,7 +14,7 @@ from DummyClient import DummyClientLocust
 
 from subprocess import Popen
 
-CHIMEDBRC = os.path.join(os.getcwd(), "tests/.chimedb_test_rc")
+CHIMEDBRC = os.path.join(os.getcwd(), "/.chimedb_test_rc")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
@@ -28,26 +28,19 @@ for i in range(2035):
 
 
 def make_small_state():
-    return {"state": {"time": str(datetime.datetime.utcnow()),
-                        "type": "start_comet.broker"
-                    },
-
-            "hash": random.getrandbits(40)
-            }
+    return {
+        "state": {
+            "time": str(datetime.datetime.utcnow()),
+            "type": "start_comet.broker",
+        },
+        "hash": random.getrandbits(40),
+    }
 
 
 def make_large_state():
-    state = {"state": {
-                    "inner": {
-                        "data": large_data
-                        }
-                    },
-            "hash":random.getrandbits(40)
-
-        }
+    state = {"state": {"inner": {"data": large_data}}, "hash": random.getrandbits(40)}
 
     return state
-
 
 
 class MyTasks(TaskSet):
