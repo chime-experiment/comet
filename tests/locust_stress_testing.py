@@ -140,7 +140,7 @@ class DummyManager(DummyClientLocust):
 
     host = HOST
     port = PORT
-    wait_time = lambda x: 3
+    wait_time = lambda x: 20
     task_set = MyTasks
 
     def setup(self):
