@@ -81,7 +81,7 @@ class MyTasks(TaskSet):
 class DummyManager(DummyClientLocust):
     host = "localhost"
     port = PORT
-    wait_time = 3
+    wait_time = lambda x: 3
     task_set = MyTasks
 
     def setup(self):
