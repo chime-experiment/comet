@@ -62,4 +62,4 @@ script:
     - ccache -s || true
 
     # run locust stress tests
-    - locust -f locust_stress_testing.py --no-web -c 200 -r 10 --run-time 5m
+    - locust -f locust_stress_testing.py --no-web -c 100 -r 10 --run-time 2m
