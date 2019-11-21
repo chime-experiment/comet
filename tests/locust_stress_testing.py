@@ -14,7 +14,7 @@ from DummyClient import DummyClientLocust
 
 from subprocess import Popen
 
-CHIMEDBRC = os.path.join(os.getcwd(), "/.chimedb_test_rc")
+CHIMEDBRC = os.path.join(os.getcwd(), ".chimedb_test_rc")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 
