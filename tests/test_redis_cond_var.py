@@ -129,7 +129,7 @@ async def test_cond_two_variables():
     tasks_a = [asyncio.create_task(task_a()) for i in range(20)]
     tasks_b = [asyncio.create_task(task_b()) for i in range(20)]
 
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
 
     for t in tasks_a + tasks_b:
         assert not t.done()
@@ -139,7 +139,7 @@ async def test_cond_two_variables():
         await cond_a.notify_all()
 
     # Wait for task A's to finish
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
 
     for t in tasks_a:
         assert t.done()
@@ -150,7 +150,7 @@ async def test_cond_two_variables():
         await cond_b.notify_all()
 
     # Wait for task B's to finish
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
 
     for t in tasks_b:
         assert t.done()
