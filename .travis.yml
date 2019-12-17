@@ -5,15 +5,9 @@ dist: bionic
 cache:
   apt: true
   pip: true
-  directories:
-    - $HOME/.ccache
 env:
   global:
-    - USE_CCACHE=1
-    - CCACHE_SLOPPINESS=pch_defines,time_macros
-    - CCACHE_COMPRESS=1
-    - CCACHE_MAXSIZE=250M
-    - PATH="/usr/lib/ccache:$HOME/miniconda/bin:$PATH"
+    - PATH="$HOME/miniconda/bin:$PATH"
     - MAKEFLAGS="-j 2"
 python:
     - 3.7
