@@ -352,8 +352,18 @@ async def register_dataset(request):
 
         dataset_valid = await check_dataset(ds)
         reply = dict()
+        root = None
         if dataset_valid:
             root = await find_root(hash, ds)
+        if root is None:
+            reply["result"] = "Dataset {} invalid.".format(hash)
+            logger.debug(
+                "register-dataset: Received invalid dataset with hash {} : {}".format(
+                    hash, ds
+                )
+            )
+            return response.json(reply)
+
         archive_ds = False
 
         # In case the shielded part of this endpoint gets cancelled, we ignore it but
@@ -384,14 +394,6 @@ async def register_dataset(request):
 
                 # Notify anything waiting for this dataset to arrive
                 signal_created(hash, "dataset", lock_datasets, waiting_datasets)
-
-            else:
-                reply["result"] = "Dataset {} invalid.".format(hash)
-                logger.debug(
-                    "register-dataset: Received invalid dataset with hash {} : {}".format(
-                        hash, ds
-                    )
-                )
 
         if archive_ds:
             await asyncio.shield(archive("dataset", request.json))
