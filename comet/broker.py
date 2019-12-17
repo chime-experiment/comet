@@ -720,7 +720,6 @@ async def update_datasets(request):
         reply["datasets"].update(await gather_update(ts, roots))
 
         reply["result"] = "success"
-        logger.debug("update-datasets: Answering with {}.".format(reply))
         return response.json(reply)
     except Exception as e:
         logger.error("update-datasets: received exception %s", e)
