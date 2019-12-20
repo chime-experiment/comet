@@ -490,12 +490,10 @@ async def gather_update(ts, roots):
                 )
 
             if tasks:
-                # Wait for all concurrent tasks
-                tasks, _ = await asyncio.wait(tasks)
+                # Wait for all concurrent tasks (gather keeps their order)
+                tasks = await asyncio.gather(*tasks)
                 # put back together the root ds IDs and the datasets
-                update.update(
-                    dict(zip(tree, [json.loads(task.result()) for task in tasks]))
-                )
+                update.update(dict(zip(tree, [json.loads(task) for task in tasks])))
     return update
 
 
