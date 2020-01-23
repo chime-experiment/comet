@@ -217,9 +217,8 @@ async def archive(data_type, json_data):
                     type(json_data["time"])
                 )
             )
-
     # push it into list for archiver
-    redis.execute(
+    await redis.execute(
         "lpush",
         "archive_{}".format(data_type),
         json.dumps({"hash": json_data["hash"], "time": json_data["time"]}),
