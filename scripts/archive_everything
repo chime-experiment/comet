@@ -1,0 +1,58 @@
+#!/usr/bin/env python3.7
+
+"""Tell the comet-archiver to archive everything currently in redis."""
+
+import aioredis
+import asyncio
+import json
+import logging
+
+from comet import broker
+
+REDIS_LIST_STATES = "states"
+REDIS_LIST_DATASETS = "datasets"
+REDIS_TODO_STATES = "state"
+REDIS_TODO_DATASETS = "dataset"
+
+
+async def send_to_archiver(redis, list_name, archive_list_name):
+    """
+    Send a state or dataset to comet-archiver.
+
+    Parameters
+    ----------
+    redis : aioredis.ConnectionPool
+        a redis instance
+    list_name : str
+        Must match the redis lists that store stuff, atm only "states" or "datasets"
+    archive_list_name : str
+        Must match the redis lists that store archive-to do's, atm only "state" or "dataset"
+    """
+    items = await redis.execute("hgetall", list_name)
+
+    items = dict(zip(items[::2], items[1::2]))
+    item_ids = list(items.keys())
+
+    print(f"\rPassing {len(item_ids)} {list_name} to archiver...")
+
+    while item_ids:
+        item_id = item_ids.pop()
+        item = json.loads(items[item_id])
+        try:
+            json_data = {"hash": item_id, "time": item["time"]}
+        except KeyError:
+            json_data = {"hash": item_id}
+        await broker.archive(archive_list_name, json_data)
+
+
+async def main():
+    await broker._init_redis_async(None, None)
+    broker.logger.setLevel(logging.INFO)
+
+    redis = await aioredis.create_pool(broker.REDIS_SERVER, encoding="utf-8")
+    await send_to_archiver(redis, REDIS_LIST_STATES, REDIS_TODO_STATES)
+    await send_to_archiver(redis, REDIS_LIST_DATASETS, REDIS_TODO_DATASETS)
+    print("Done. See logs of comet-archiver.")
+
+
+asyncio.run(main())
