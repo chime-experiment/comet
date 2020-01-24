@@ -3,7 +3,6 @@ os: linux
 sudo: required
 dist: bionic
 cache:
-  apt: true
   pip: true
   directories:
     - $HOME/.ccache
