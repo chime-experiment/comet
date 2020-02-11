@@ -198,7 +198,7 @@ class Archiver:
 
         try:
             db.insert_dataset(ds_id, base_dset, is_root, state, timestamp)
-        except db.DatasetState.DoesNotExist:
+        except db.orm.DatasetState.DoesNotExist:
             logger.error(
                 "Failure archiving dataset (DB doesn't know the referenced state): {}".format(
                     data
@@ -206,7 +206,7 @@ class Archiver:
             )
             self._pushback("archive_dataset", data)
             return
-        except db.Dataset.DoesNotExist:
+        except db.orm.Dataset.DoesNotExist:
             logger.error(
                 "Failure archiving dataset (DB doesn't know the referenced base dataset): {}".format(
                     data
