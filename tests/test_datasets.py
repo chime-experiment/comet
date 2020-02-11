@@ -140,12 +140,16 @@ def test_archiver(archiver, simple_ds, manager, broker):
     # Open database connection
     chimedb.connect()
 
-    ds = get_dataset(dset_id)
+    ds = Dataset.from_id(dset_id)
+
+    assert ds is not None
 
     assert ds.state.id == state_id
+    assert ds.dataset_state.id == state_id
+    assert ds.state_id == state_id
     assert ds.root is True
 
-    state = get_state(state_id)
+    state = DatasetState.from_id(state_id)
     assert state.id == state_id
     assert state.type.name == "test"
     assert state.data == {"foo": "bar", "type": "test"}
