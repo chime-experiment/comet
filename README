@@ -22,4 +22,4 @@ Running Comet
 -------------
 Comet can be run with:
 
-  python3 scripts/comet
+  comet --help
