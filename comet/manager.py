@@ -16,6 +16,7 @@ SEND_STATE = "/send-state"
 STATUS = "/status"
 STATES = "/states"
 DATASETS = "/datasets"
+UPDATE_DATASETS = "/update-datasets"
 
 TIMESTAMP_FORMAT = "%Y-%m-%d-%H:%M:%S.%f"
 
@@ -68,6 +69,11 @@ class Manager:
         self.states = dict()
         self.state_reg_time = dict()
         self.datasets = dict()
+
+        # set this to 0 so we get a full update from the broker the first time
+        self._dataset_update_timestamp = 0
+
+        self._known_root_ds_ids = {}
 
     def register_start(self, start_time, version, config=None):
         """Register a startup with the broker.
@@ -507,13 +513,8 @@ class Manager:
 
         If called without parameters, this returns the dataset added last.
 
-        Note
-        ----
-        This only finds datasets that where registered locally with the comet manager.
-
-        Todo
-        ----
-        Ask the broker for unknown datasets.
+        If the requested dataset is not known locally an update from the comet broker
+        is requested. If the broker also doesn't know the dataset, `None` is returned.
 
         Parameters
         ----------
@@ -526,7 +527,47 @@ class Manager:
         dict
             The requested dataset. Returns `None` if requested dataset not found.
         """
-        return self.datasets.get(dataset_id, None)
+        try:
+            return self.datasets[dataset_id]
+        except KeyError:
+            self._update_datasets(dataset_id)
+            return self.datasets.get(dataset_id, None)
+
+    def _update_datasets(self, dataset_id):
+        """
+        Get dataset update from broker.
+
+        Gets an update on new datasets known to the broker since the last update.
+
+        Parameters
+        ----------
+        dataset_id : int
+            ID of the dataset to get an update for. The update will be limited to
+            datasets with the same root, in case the root is known already.
+
+        Raises
+        ------
+        BrokerError
+            If there was an error when communicating with the broker.
+        """
+        logger.debug("Requesting dataset update for ID {}...".format(dataset_id))
+        data = {
+            "ts": self._dataset_update_timestamp,
+            "ds_id": dataset_id,
+            "roots": self._known_root_ds_ids,
+        }
+        reply = self._send(UPDATE_DATASETS, data, "post")
+
+        # save update timestamp for next time
+        self._dataset_update_timestamp = reply["ts"]
+
+        # look for root datasets
+        for id, ds in reply["datasets"].items():
+            if ds["is_root"]:
+                self._known_root_ds_ids["id"] = ds
+
+        # save new datasets
+        self.datasets.update(reply["datasets"])
 
     def broker_status(self):
         """
