@@ -415,6 +415,12 @@ class Manager:
                 self.broker + endpoint, data=json.dumps(data), timeout=TIMEOUT
             )
             reply.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            raise BrokerError(
+                "Failure connecting to comet.broker at {}{} (make sure it's running): {}".format(
+                    self.broker, endpoint, err
+                )
+            )
         except requests.exceptions.ConnectionError:
             raise BrokerError(
                 "Failure connecting to comet.broker at {}{}: make sure it is "
