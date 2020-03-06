@@ -24,9 +24,11 @@ from .manager import Manager, CometError, TIMESTAMP_FORMAT
 
 
 REQUESTED_STATE_TIMEOUT = 35
-WAIT_TIME = 40
 DEFAULT_PORT = 12050
 REDIS_SERVER = ("localhost", 6379)
+
+# config variable
+wait_time = None
 
 app = Sanic(__name__)
 app.config.REQUEST_TIMEOUT = 120
@@ -634,10 +636,10 @@ async def wait_for_x(id, name, lock, redis_hash, event_dict):
         wait_event = event_dict[id]
 
     try:
-        await asyncio.wait_for(wait_event.wait(), WAIT_TIME)
+        await asyncio.wait_for(wait_event.wait(), wait_time)
     except asyncio.TimeoutError:
         logger.warning(
-            f"wait_for_{name}: Timeout ({WAIT_TIME}s) when waiting for {name} {id}"
+            f"wait_for_{name}: Timeout ({wait_time}s) when waiting for {name} {id}"
         )
         return False
     except asyncio.CancelledError:
@@ -760,12 +762,14 @@ class Broker:
     """Main class to run the comet dataset broker."""
 
     # Todo: deprecated. the kwargs are only there to allow deprecated command line options
-    def __init__(self, debug, port, **kwargs):
+    def __init__(self, debug, port, timeout, **kwargs):
         self.config = {"debug": debug, "port": port}
 
         self.debug = debug
         self.startup_time = datetime.datetime.utcnow()
         self.port = None
+        global wait_time
+        wait_time = timeout
 
     @staticmethod
     def _flush_redis():
