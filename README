@@ -20,6 +20,7 @@ Install comet:
   
 Running Comet
 -------------
-Comet can be run with:
+To see the usage of comet, run:
+
 
   comet --help
