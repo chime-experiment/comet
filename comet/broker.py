@@ -1,4 +1,17 @@
-"""REST Server for CoMeT (the Dataset Broker)."""
+"""
+REST Server for CoMeT (the Dataset Broker).
+
+Available endpoints:
+- status
+- get_states
+- get_datasets
+- register_state
+- send_state
+- register_dataset
+- request-state
+- update-datasets
+- internal-states
+"""
 import aioredis
 import asyncio
 import datetime
