@@ -1,13 +1,16 @@
 """CoMeT dataset manager."""
 
-import copy
+from .dataset import Dataset
+from .exception import BrokerError, ManagerError
+from .hash import hash_dictionary
+from .state import State
+
 import datetime
 import inspect
 import logging
 import json
 
 import requests
-import mmh3
 
 # Endpoint names:
 REGISTER_STATE = "/register-state"
@@ -17,6 +20,7 @@ STATUS = "/status"
 STATES = "/states"
 DATASETS = "/datasets"
 UPDATE_DATASETS = "/update-datasets"
+REQUEST_STATE = "/request-state"
 
 TIMESTAMP_FORMAT = "%Y-%m-%d-%H:%M:%S.%f"
 
@@ -24,24 +28,6 @@ TIMEOUT = 60
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-class CometError(BaseException):
-    """Base class for all comet exceptions."""
-
-    pass
-
-
-class ManagerError(CometError):
-    """There was an internal error in dataset management."""
-
-    pass
-
-
-class BrokerError(CometError):
-    """There was an error registering states or datasets with the broker."""
-
-    pass
 
 
 class Manager:
@@ -148,10 +134,9 @@ class Manager:
                 name = inspect.getmodule(inspect.stack()[1][0]).__file__
             logger.info("Registering config for {}.".format(name))
 
-            state = copy.deepcopy(config)
+            state = State(config, "config_{}".format(name))
 
-            state["type"] = "config_{}".format(name)
-            state_id = self._make_hash(state)
+            state_id = state.id
 
             request = {"hash": state_id}
             reply = self._send(REGISTER_STATE, request)
@@ -163,7 +148,7 @@ class Manager:
                         "The broker is asking for state {} when state {} (config) "
                         "was registered.".format(reply.get("hash"), state_id)
                     )
-                self._send_state(state_id, state)
+                self._send_state(state)
 
             self.states[state_id] = state
             self.config_state = state_id
@@ -175,14 +160,15 @@ class Manager:
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
         logger.info("Registering startup for {}.".format(name))
 
-        state = {
+        data = {
             "time": start_time.strftime(TIMESTAMP_FORMAT),
             "version": version,
-            "type": "start_{}".format(name),
         }
         if config:
-            state["config_state"] = self.config_state
-        state_id = self._make_hash(state)
+            data["config_state"] = self.states[self.config_state].to_dict()
+        state = State(data, "start_{}".format(name))
+
+        state_id = state.id
 
         request = {"hash": state_id}
         reply = self._send(REGISTER_STATE, request)
@@ -194,7 +180,7 @@ class Manager:
                     "The broker is asking for state {} when state {} (start) was "
                     "registered.".format(reply.get("hash"), state_id)
                 )
-            self._send_state(state_id, state)
+            self._send_state(state)
 
         self.states[state_id] = state
         self.start_state = state_id
@@ -253,10 +239,9 @@ class Manager:
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
         logger.info("Registering config for {}.".format(name))
 
-        state = copy.deepcopy(config)
+        state = State(config, "config_{}".format(name))
 
-        state["type"] = "config_{}".format(name)
-        state_id = self._make_hash(state)
+        state_id = state.id
 
         request = {"hash": state_id}
         reply = self._send(REGISTER_STATE, request)
@@ -268,7 +253,7 @@ class Manager:
                     "The broker is asking for state {} when state {} (config) "
                     "was registered.".format(reply.get("hash"), state_id)
                 )
-            self._send_state(state_id, state)
+            self._send_state(state)
 
         self.states[state_id] = state
         self.config_state = state_id
@@ -276,9 +261,7 @@ class Manager:
 
         return
 
-    def register_state(
-        self, state, state_type, dump=True, timestamp=None, state_id=None
-    ):
+    def register_state(self, data, state_type, dump=True, timestamp=None):
         """Register a state with the broker.
 
         This does not attach the state to a dataset. (yet!)
@@ -297,10 +280,6 @@ class Manager:
             `comet.manager.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
             time. Only supply this if you know what you're doing. This is for example to resend
             previously dumped states to the broker again after a crash.
-        state_id : int
-            Manually set the hash of this state instead of letting comet compute it. Set this only
-            if you know what you are doing. This is for example to resend states originally hashed
-            and registered by kotekan after a failure or restart. Default: None.
 
         Raises
         ------
@@ -312,9 +291,9 @@ class Manager:
             If the broker can't be reached.
 
         """
-        if not (isinstance(state, dict) or state is None):
+        if not (isinstance(data, dict) or data is None):
             raise ManagerError(
-                "state needs to be a dictionary (is `{}`).".format(type(state).__name__)
+                "data needs to be a dictionary (is `{}`).".format(type(data).__name__)
             )
         if not self.start_state:
             raise ManagerError(
@@ -322,15 +301,9 @@ class Manager:
                 "(use 'register_start()')."
             )
 
-        state = copy.deepcopy(state)
+        state = State(data, state_type)
 
-        if state_type:
-            state["type"] = state_type
-        elif state:
-            state_type = state["type"]
-
-        if state_id is None:
-            state_id = self._make_hash(state)
+        state_id = state.id
 
         request = {"hash": state_id, "dump": dump}
         if timestamp:
@@ -344,7 +317,7 @@ class Manager:
                     "The broker is asking for state {} when state {} ({}) was "
                     "registered.".format(reply.get("hash"), state_id, state_type)
                 )
-            self._send_state(state_id, state, dump)
+            self._send_state(state, dump)
 
         self.states[state_id] = state
         self.state_reg_time[state_id] = datetime.datetime.utcnow()
@@ -352,17 +325,17 @@ class Manager:
         return state_id
 
     def register_dataset(
-        self, state, base_ds, type, root=False, dump=True, timestamp=None, ds_id=None
+        self, state, base_ds, state_type, root=False, dump=True, timestamp=None
     ):
         """Register a dataset with the broker.
 
         Parameters
         ----------
-        state : int
+        state : str
             Hash / state ID of the state attached to this dataset.
-        base_ds : int
+        base_ds : str
             Hash / dataset ID of the base dataset or `None` if this is a root dataset.
-        type : str
+        state_type : str
             State type name of this state.
         root : bool
             `True` if this is a root dataset (default `False`).
@@ -373,10 +346,6 @@ class Manager:
             `comet.manager.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
             time. Only supply this if you know what you're doing. This is for example to resend
             previously dumped datasets to the broker again after a crash.
-        ds_id : int
-            Manually set the hash of this dataset instead of letting comet compute it. Set this
-            only if you know what you are doing. This is for example to resend states originally
-            hashed and registered by kotekan after a failure or restart. Default: None.
 
         Raises
         ------
@@ -398,14 +367,10 @@ class Manager:
                 "(use 'register_start()')."
             )
 
-        ds = {"is_root": root, "state": state, "type": type}
-        if base_ds is not None:
-            ds["base_dset"] = base_ds
+        ds = Dataset(state, base_ds, state_type, root)
+        ds_id = ds.id
 
-        if ds_id is None:
-            ds_id = self._make_hash(ds)
-
-        request = {"hash": ds_id, "ds": ds, "dump": dump}
+        request = {"hash": ds_id, "ds": ds.to_dict(), "dump": dump}
         if timestamp:
             request["time"] = timestamp
         self._send(REGISTER_DATASET, request)
@@ -441,10 +406,10 @@ class Manager:
         self._check_result(reply.get("result"), endpoint)
         return reply
 
-    def _send_state(self, state_id, state, dump=True):
-        logger.debug("sending state {}".format(state_id))
+    def _send_state(self, state, dump=True):
+        logger.debug("sending state {}".format(state.id))
 
-        request = {"hash": state_id, "state": state, "dump": dump}
+        request = {"hash": state.id, "state": state.to_dict(), "dump": dump}
         self._send(SEND_STATE, request)
 
     def _check_result(self, result, endpoint):
@@ -455,57 +420,94 @@ class Manager:
                 )
             )
 
-    @staticmethod
-    def _make_hash(data):
-        return "%032x" % mmh3.hash128(json.dumps(data, sort_keys=True), seed=1420)
-
     def get_state(self, type=None, dataset_id=None):
         """
-        Get the static config or the dataset state that was added last.
+        Given a dataset ID, get the last state of a given type.
 
         If called without parameters, this returns the static config that was registered.
 
-        Note
-        ----
-        This only finds state that where registered locally with the comet manager.
-
-        Todo
-        ----
-        Ask the broker for unknown states.
+        If the state is not known locally by the manager, a dataset update as well as
+        the state itself is requested from the broker.
 
         Parameters
         ----------
         type : str
-            The name of the type of the state to return. If this is `None`, the initial config will
-            be returned. Default: `None`.
+            The name of the type of the state to return. If this is `None`, the initial
+            config will be returned. Default: `None`.
         dataset_id : int
-            The ID of the dataset the last state of given type should be returned for. If this is
-            `None` the dataset hirarchy is assumed to not have multiple branches. Default: `None`.
+            The ID of the dataset the last state of given type should be returned for.
+            If this is `None` the dataset hirarchy is assumed to not have multiple
+            branches. Default: `None`.
 
         Returns
         -------
-        dict
-            The last config or state of requested type that was registered. Returns `None` if
-            requested state not found.
+        State
+            The last config or state of requested type that was registered. Returns
+            `None` if requested state not found.
+
+        Raises
+        ------
+        ManagerError
+            If an error in the dataset tree is encountered.
         """
-        if dataset_id is not None:
-            raise ManagerError(
-                "get_state: Not implemented for dataset_id other than None."
-            )
+        if dataset_id is None:
+            # return whatever was registered last of that type
+            if type is None:
+                return self.states[self.config_state]
 
-        if type is None:
-            return self.states[self.config_state]
+            states_of_type = list()
+            for state_id in self.states:
+                state = self.states[state_id]
+                if state.type == type:
+                    states_of_type.append(state)
 
-        states_of_type = list()
-        for state_id in self.states:
-            state = self.states[state_id]
-            if state["type"] == type:
-                states_of_type.append(state)
+            if states_of_type:
+                states_of_type.sort(key=lambda s: self.state_reg_time[state_id])
+                return states_of_type[-1]
+            return None
+        else:
+            # traverse the tree towards the root to find a matching state type
+            while True:
+                dataset = self.get_dataset(dataset_id)
+                if type is None or type == dataset.state_type:
+                    return self._get_state(dataset.state_id)
+                if dataset.is_root == True:
+                    return None
+                dataset_id = dataset.base_dataset_id
+                if dataset_id is None:
+                    raise ManagerError(
+                        "Found a dataset that is not root nor has a base dataset ID: {}".format(
+                            dataset.to_dict()
+                        )
+                    )
 
-        if states_of_type:
-            states_of_type.sort(key=lambda s: self.state_reg_time[state_id])
-            return states_of_type[-1]
-        return None
+    def _get_state(self, state_id):
+        """
+        Get a state by ID.
+
+        If not known locally, the dataset broker is asked. Returns `None` if the state
+        is still unknown.
+
+        Parameters
+        ----------
+        state_id : int
+            ID of the requested state.
+
+        Returns
+        -------
+        dict or None
+            The requested state.
+        """
+        try:
+            return self.states[state_id]
+        except KeyError:
+            try:
+                reply = self._send(REQUEST_STATE, {"id": state_id}, "post")
+                self.states[state_id] = State.from_dict(reply["state"])
+            except BrokerError as err:
+                logger.warning("Failure requesting state {}: {}".format(state_id, err))
+                return None
+            return self.states[state_id]
 
     def get_dataset(self, dataset_id=None):
         """
@@ -518,13 +520,13 @@ class Manager:
 
         Parameters
         ----------
-        dataset_id : int
+        dataset_id : str
             The ID of the dataset that should be returned. If this is `None` the dataset added last
             is returned. Default: `None`.
 
         Returns
         -------
-        dict
+        Dataset or None
             The requested dataset. Returns `None` if requested dataset not found.
         """
         try:
@@ -541,7 +543,7 @@ class Manager:
 
         Parameters
         ----------
-        dataset_id : int
+        dataset_id : str
             ID of the dataset to get an update for. The update will be limited to
             datasets with the same root, in case the root is known already.
 
@@ -561,13 +563,12 @@ class Manager:
         # save update timestamp for next time
         self._dataset_update_timestamp = reply["ts"]
 
-        # look for root datasets
-        for id, ds in reply["datasets"].items():
-            if ds["is_root"]:
-                self._known_root_ds_ids["id"] = ds
-
         # save new datasets
-        self.datasets.update(reply["datasets"])
+        for id, ds_ in reply["datasets"].items():
+            ds = Dataset.from_dict(ds_)
+            self.datasets[id] = ds
+            if ds.is_root:
+                self._known_root_ds_ids[id] = ds.id
 
     def broker_status(self):
         """

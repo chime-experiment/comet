@@ -10,6 +10,7 @@ from datetime import datetime
 from subprocess import Popen
 
 from comet import Manager, BrokerError
+from comet.hash import hash_dictionary
 from chimedb.dataset import get_state, get_dataset, DatasetState, Dataset
 import chimedb.core as chimedb
 
@@ -118,11 +119,11 @@ def simple_ds(manager):
 def test_hash(manager):
     assert isinstance(manager, Manager)
 
-    assert manager._make_hash(A) == manager._make_hash(A)
-    assert manager._make_hash(A) == manager._make_hash(B)
-    assert manager._make_hash(A) != manager._make_hash(C)
-    assert manager._make_hash(A) != manager._make_hash(D)
-    assert manager._make_hash(A) != manager._make_hash(E)
+    assert hash_dictionary(A) == hash_dictionary(A)
+    assert hash_dictionary(A) == hash_dictionary(B)
+    assert hash_dictionary(A) != hash_dictionary(C)
+    assert hash_dictionary(A) != hash_dictionary(D)
+    assert hash_dictionary(A) != hash_dictionary(E)
 
 
 def test_register_config(manager, broker):
@@ -282,3 +283,26 @@ def test_get_dataset_failure(manager_low_timeout, broker_low_timeout):
     with pytest.raises(BrokerError):
         # what's the chance my wifi password is a valid dataset ID?
         manager_low_timeout.get_dataset(1234567890)
+
+
+def test_get_state(simple_ds, manager_new, broker):
+    """Test to get a state from a new manager requesting it from the broker."""
+    dset_id = simple_ds[0]
+    state_id = simple_ds[1]
+
+    test_state = manager_new.get_state(type="test", dataset_id=dset_id)
+    test_state2 = manager_new._get_state(state_id)
+
+    print(test_state)
+    print(test_state2)
+    assert test_state["type"] == "test"
+    assert test_state["foo"] == "bar"
+    assert test_state == test_state2
+
+
+def test_get_state_failure(simple_ds, manager_new, broker):
+    """Test to get a nonexistent state from a new manager."""
+
+    test_state = manager_new.get_state(987654321)
+
+    assert test_state is None

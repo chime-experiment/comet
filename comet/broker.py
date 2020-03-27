@@ -33,7 +33,8 @@ from sanic import response
 from sanic.log import logger
 
 from . import __version__
-from .manager import Manager, CometError, TIMESTAMP_FORMAT
+from .manager import Manager, TIMESTAMP_FORMAT
+from .exception import CometError
 
 
 REQUESTED_STATE_TIMEOUT = 35
