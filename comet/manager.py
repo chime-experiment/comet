@@ -2,7 +2,6 @@
 
 from .dataset import Dataset
 from .exception import BrokerError, ManagerError
-from .hash import hash_dictionary
 from .state import State
 
 import datetime
@@ -367,7 +366,13 @@ class Manager:
                 "(use 'register_start()')."
             )
 
-        ds = Dataset(state, base_ds, state_type, root)
+        ds = Dataset(
+            state_id=state,
+            state_type=state_type,
+            dataset_id=None,
+            base_dataset_id=base_ds,
+            is_root=root,
+        )
         ds_id = ds.id
 
         request = {"hash": ds_id, "ds": ds.to_dict(), "dump": dump}
@@ -490,7 +495,7 @@ class Manager:
 
         Parameters
         ----------
-        state_id : int
+        state_id : str
             ID of the requested state.
 
         Returns
@@ -503,7 +508,7 @@ class Manager:
         except KeyError:
             try:
                 reply = self._send(REQUEST_STATE, {"id": state_id}, "post")
-                self.states[state_id] = State.from_dict(reply["state"])
+                self.states[state_id] = State.from_dict(reply["state"], state_id)
             except BrokerError as err:
                 logger.warning("Failure requesting state {}: {}".format(state_id, err))
                 return None
@@ -565,7 +570,7 @@ class Manager:
 
         # save new datasets
         for id, ds_ in reply["datasets"].items():
-            ds = Dataset.from_dict(ds_)
+            ds = Dataset.from_dict(ds_, id)
             self.datasets[id] = ds
             if ds.is_root:
                 self._known_root_ds_ids[id] = ds.id

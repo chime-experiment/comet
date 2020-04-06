@@ -13,13 +13,17 @@ class Dataset:
         ID of the dataset state of this dataset.
     state_type : str
         Type of the dataset state of this dataset.
+    dataset_id : str
+        (optional) ID (hash) of this dataset. If not supplied, it's generated internally.
     base_dataset_id : str
         ID of the base dataset or `None` if this is a root dataset (default `None`).
     is_root : bool
         `True`, if this is a root dataset (default `False`).
     """
 
-    def __init__(self, state_id, state_type, base_dataset_id=None, is_root=False):
+    def __init__(
+        self, state_id, state_type, dataset_id=None, base_dataset_id=None, is_root=False
+    ):
         if not is_root and base_dataset_id is None:
             raise ValueError(
                 "A dataset needs to either have a base dataset or be a root dataset (found neither)."
@@ -28,10 +32,13 @@ class Dataset:
         self._base_dataset_id = base_dataset_id
         self._state_type = state_type
         self._is_root = is_root
-        self._id = hash_dictionary(self.to_dict())
+        if dataset_id is None:
+            self._id = hash_dictionary(self.to_dict())
+        else:
+            self._id = dataset_id
 
     @classmethod
-    def from_dict(cls, dict_):
+    def from_dict(cls, dict_, dataset_id):
         """
         Create a `Dataset` object from a dictionary.
 
@@ -41,6 +48,8 @@ class Dataset:
             Dictionary containing `state : str` (the ID of the state), `base_dset : str` (ID of the
             base dataset, only if this is not a root dataset), `type : str` (type of the state),
             `is_root` (`True` if this is a root dataset, default: `False`).
+        dataset_id : str
+            (optional) ID (hash) of this dataset. If not supplied, it's generated internally.
 
         Returns
         -------
@@ -65,7 +74,7 @@ class Dataset:
                 "Expected key '{}' in state dict (found {}).".format(e, dict_.keys())
             )
 
-        return cls(state_id, state_type, base_ds_id, is_root)
+        return cls(state_id, state_type, dataset_id, base_ds_id, is_root)
 
     @property
     def id(self):

@@ -15,22 +15,29 @@ class State:
         State data.
     state_type : str
         State type, e.g. "inputs", "metadata".
+    state_id : str
+        (optional) ID (hash) of this state. If not supplied, it's generated internally.
     """
 
-    def __init__(self, data, state_type):
+    def __init__(self, data, state_type, state_id=None):
         self._data = deepcopy(data)
         self._type = state_type
-        self._id = hash_dictionary(self.to_dict())
+        if state_id is None:
+            self._id = hash_dictionary(self.to_dict())
+        else:
+            self._id = state_id
 
     @classmethod
-    def from_dict(cls, dict_):
+    def from_dict(cls, dict_, state_id=None):
         """
         Create a `State` object from a dictionary.
 
         Parameters
         ----------
         dict_ : dict
-            Dictionary with an entry `type`. All additional entries make the state data.
+            Dictionary with entry `type`. All additional entries make the state data.
+        state_id : str
+            (optional) ID (hash) of this state. If not supplied, it's generated internally.
 
         Returns
         -------
@@ -51,7 +58,7 @@ class State:
                 "Expected key 'type' in state json (found {}).".format(dict_.keys())
             )
 
-        return cls(dict_, state_type)
+        return cls(dict_, state_type, state_id)
 
     @property
     def data(self):
