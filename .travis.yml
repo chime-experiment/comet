@@ -61,6 +61,3 @@ script:
     - mkdir skyfield_data
     - CAPUT_SKYFIELD_PATH=skyfield_data ./kotetest.sh
     - ccache -s || true
-
-    # run locust stress tests
-    - locust -f locust_stress_testing.py --no-web -c 100 -r 10 --run-time 2m
