@@ -38,7 +38,7 @@ class Dataset:
             self._id = dataset_id
 
     @classmethod
-    def from_dict(cls, dict_, dataset_id):
+    def from_dict(cls, dict_, dataset_id=None):
         """
         Create a `Dataset` object from a dictionary.
 

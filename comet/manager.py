@@ -463,7 +463,7 @@ class Manager:
             states_of_type = list()
             for state_id in self.states:
                 state = self.states[state_id]
-                if state.type == type:
+                if state.state_type == type:
                     states_of_type.append(state)
 
             if states_of_type:

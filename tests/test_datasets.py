@@ -9,10 +9,10 @@ import signal
 from datetime import datetime
 from subprocess import Popen
 
-from comet import Manager, BrokerError
+from comet import Manager, BrokerError, State, Dataset
 from comet.hash import hash_dictionary
-from chimedb.dataset import get_state, get_dataset, DatasetState, Dataset
-import chimedb.core as chimedb
+import chimedb.dataset
+import chimedb.core
 
 CHIMEDBRC = os.path.join(os.getcwd() + "/.chimedb_test_rc")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
@@ -131,7 +131,7 @@ def test_register_config(manager, broker):
     expected_config_dump = CONFIG
     expected_config_dump["type"] = "config_{}".format(__name__)
 
-    assert expected_config_dump == manager.get_state()
+    assert expected_config_dump == manager.get_state().to_dict()
 
 
 # TODO: register stuff here, then with a new broker test recovery in test_recover
@@ -150,10 +150,10 @@ def test_recover(manager, broker, simple_ds):
 
     ds = manager.get_dataset(dset_id)
     state = manager.get_state("test")
-    assert state == {"foo": "bar", "type": "test"}
-    assert ds["is_root"] is True
+    assert state.to_dict() == {"foo": "bar", "type": "test"}
+    assert ds.is_root is True
     # TODO: fix hash function # assert ds["state"] == manager._make_hash(state)
-    assert ds["type"] == "test"
+    assert ds.state_type == "test"
 
 
 def test_archiver(archiver, simple_ds, manager, broker):
@@ -168,19 +168,19 @@ def test_archiver(archiver, simple_ds, manager, broker):
     os.environ["CHIMEDB_TEST_ENABLE"] = "foo"
 
     # Open database connection
-    chimedb.connect()
+    chimedb.core.connect()
 
-    ds = get_dataset(dset_id)
+    ds = chimedb.dataset.get_dataset(dset_id)
 
     assert ds.state.id == state_id
     assert ds.root is True
 
-    state = get_state(state_id)
+    state = chimedb.dataset.get_state(state_id)
     assert state.id == state_id
     assert state.type.name == "test"
     assert state.data == {"foo": "bar", "type": "test"}
 
-    chimedb.close()
+    chimedb.core.close()
 
 
 def test_archiver_pushback(archiver):
@@ -189,8 +189,12 @@ def test_archiver_pushback(archiver):
     assert r.llen("archive_state") == 0
 
     # remove from redis and DB to make this test behave the same if run twice
-    Dataset.delete().where(Dataset.id == "test_ds").execute()
-    DatasetState.delete().where(DatasetState.id == "test_state").execute()
+    chimedb.dataset.Dataset.delete().where(
+        chimedb.dataset.Dataset.id == "test_ds"
+    ).execute()
+    chimedb.dataset.DatasetState.delete().where(
+        chimedb.dataset.DatasetState.id == "test_state"
+    ).execute()
     r.hdel("states", "test_state")
     r.hdel("datasets", "test_ds")
 
@@ -274,7 +278,7 @@ def test_get_dataset(simple_ds, manager_new, broker):
 
     test_ds = manager_new.get_dataset(dset_id)
 
-    assert test_ds["state"] == state_id
+    assert test_ds.state_id == state_id
 
 
 def test_get_dataset_failure(manager_low_timeout, broker_low_timeout):
@@ -293,11 +297,9 @@ def test_get_state(simple_ds, manager_new, broker):
     test_state = manager_new.get_state(type="test", dataset_id=dset_id)
     test_state2 = manager_new._get_state(state_id)
 
-    print(test_state)
-    print(test_state2)
-    assert test_state["type"] == "test"
-    assert test_state["foo"] == "bar"
-    assert test_state == test_state2
+    assert test_state.state_type == "test"
+    assert test_state.data["foo"] == "bar"
+    assert test_state.to_dict() == test_state2.to_dict()
 
 
 def test_get_state_failure(simple_ds, manager_new, broker):
@@ -306,3 +308,21 @@ def test_get_state_failure(simple_ds, manager_new, broker):
     test_state = manager_new.get_state(987654321)
 
     assert test_state is None
+
+
+def test_tofrom_dict(simple_ds, manager):
+    """Test to get a state from a new manager requesting it from the broker."""
+    dset_id = simple_ds[0]
+    state_id = simple_ds[1]
+
+    # Dataset de-/serialization
+    test_ds = manager.get_dataset(dset_id)
+    dict_ = test_ds.to_dict()
+    from_dict = Dataset.from_dict(dict_)
+    assert from_dict.to_dict() == test_ds.to_dict()
+
+    # State de-/serialization
+    test_state = manager.get_state(type="test", dataset_id=dset_id)
+    dict_ = test_state.to_dict()
+    from_dict = State.from_dict(dict_)
+    assert test_state.to_dict() == from_dict.to_dict()
