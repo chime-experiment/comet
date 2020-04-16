@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2020.04.0](https://github.com/chime-experiment/comet/compare/2019.12.1...2020.04.0) (2020-04-10)
+
+
+### Bug Fixes
+
+* **broker:** use asyncio.gather ([83592ab](https://github.com/chime-experiment/comet/commit/83592ab))
+* **manager:** raise BrokerError for bad HTTP status ([fb563a6](https://github.com/chime-experiment/comet/commit/fb563a6))
+
+
+### Features
+
+* **archive_everything:** trigger (re-)archiving of all data ([19b8222](https://github.com/chime-experiment/comet/commit/19b8222))
+* **broker:** add --timeout (default 40) ([1b77468](https://github.com/chime-experiment/comet/commit/1b77468))
+* **manager:** get_dataset requests updates if needed ([0039c08](https://github.com/chime-experiment/comet/commit/0039c08))
+* **manager:** get_state asks broker if unknown ([e561b5a](https://github.com/chime-experiment/comet/commit/e561b5a))
+
 ### [2019.12.1](https://github.com/chime-experiment/comet/compare/2019.12.0...2019.12.1) (2019-12-19)
 
 

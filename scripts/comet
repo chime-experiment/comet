@@ -31,6 +31,12 @@ parser.add_argument(
         type=int,
         )
 parser.add_argument(
+    "--timeout",
+    help="set timeout in seconds",
+    default=40,
+    type=int,
+)
+parser.add_argument(
         "--debug",
         help="set debug mode (default: False)",
         default=False,
