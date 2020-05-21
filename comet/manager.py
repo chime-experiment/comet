@@ -60,7 +60,7 @@ class Manager:
 
         self._known_root_ds_ids = {}
 
-    def register_start(self, start_time, version, config=None):
+    def register_start(self, start_time, version, config=None, register_datasets=False):
         """Register a startup with the broker.
 
         This should never be called twice with different parameters. If you want to register a
@@ -84,6 +84,15 @@ class Manager:
             working tree.
         config : dict
             The config should be JSON-serializable, preferably a dictionary.
+        register_datasets : bool
+            (optional) If this is `True, the manager will register a root dataset linked to the
+            config state and a second dataset as a child to that, linked to the start state.
+            The latter is then returned. Default `False`.
+
+        Returns
+        -------
+        `None`, or :class:`Dataset`
+            If `register_dataset` is `True`, a leaf dataset of a new dataset tree will be returned.
 
         Raises
         ------
@@ -133,9 +142,9 @@ class Manager:
                 name = inspect.getmodule(inspect.stack()[1][0]).__file__
             logger.info("Registering config for {}.".format(name))
 
-            state = State(config, "config_{}".format(name))
+            config_state = State(config, "config_{}".format(name))
 
-            state_id = state.id
+            state_id = config_state.id
 
             request = {"hash": state_id}
             reply = self._send(REGISTER_STATE, request)
@@ -147,10 +156,10 @@ class Manager:
                         "The broker is asking for state {} when state {} (config) "
                         "was registered.".format(reply.get("hash"), state_id)
                     )
-                self._send_state(state)
+                self._send_state(config_state)
 
-            self.states[state_id] = state
-            self.config_state = state_id
+            self.states[state_id] = config_state
+            self.config_state = config_state
             self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         # get name of callers module
@@ -163,11 +172,11 @@ class Manager:
             "time": start_time.strftime(TIMESTAMP_FORMAT),
             "version": version,
         }
-        if config:
-            data["config_state"] = self.states[self.config_state].to_dict()
-        state = State(data, "start_{}".format(name))
+        if config and not register_datasets:
+            data["config_state"] = self.config_state.to_dict()
+        start_state = State(data, "start_{}".format(name))
 
-        state_id = state.id
+        state_id = start_state.id
 
         request = {"hash": state_id}
         reply = self._send(REGISTER_STATE, request)
@@ -179,13 +188,28 @@ class Manager:
                     "The broker is asking for state {} when state {} (start) was "
                     "registered.".format(reply.get("hash"), state_id)
                 )
-            self._send_state(state)
+            self._send_state(start_state)
 
-        self.states[state_id] = state
-        self.start_state = state_id
+        self.states[state_id] = start_state
+        self.start_state = start_state
         self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
-        return
+        if register_datasets:
+            if config:
+                config_ds = self.register_dataset(
+                    config_state, None, config_state.state_type, True
+                )
+                return self.register_dataset(
+                    start_state, config_ds, start_state.state_type
+                )
+            # Todo: deprecated
+            # If there's no config, register the start state with a root dataset.
+            else:
+                return self.register_dataset(
+                    start_state, None, start_state.state_type, True
+                )
+        else:
+            return None
 
     def register_config(self, config):
         """Register a static config with the broker.
@@ -255,7 +279,7 @@ class Manager:
             self._send_state(state)
 
         self.states[state_id] = state
-        self.config_state = state_id
+        self.config_state = state
         self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
         return
@@ -481,7 +505,7 @@ class Manager:
         if dataset_id is None:
             # return whatever was registered last of that type
             if type is None:
-                return self.states[self.config_state]
+                return self.config_state
 
             states_of_type = list()
             for state_id in self.states:

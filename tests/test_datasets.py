@@ -50,8 +50,16 @@ def manager():
 def manager_new():
     manager = Manager("localhost", PORT)
 
-    manager.register_start(now, version, CONFIG)
+    assert manager.register_start(now, version, CONFIG) is None
     return manager
+
+
+@pytest.fixture(scope="session", autouse=True)
+def manager_and_dataset():
+    manager = Manager("localhost", PORT)
+
+    ds = manager.register_start(now, version, CONFIG, register_datasets=True)
+    return manager, ds
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -326,3 +334,26 @@ def test_tofrom_dict(simple_ds, manager):
     dict_ = test_state.to_dict()
     from_dict = State.from_dict(dict_)
     assert test_state.to_dict() == from_dict.to_dict()
+
+
+def test_register_start_dataset_automated(manager_and_dataset, broker):
+    """Test register_start option register_datasets."""
+
+    manager, ds = manager_and_dataset
+    start_state = manager.start_state
+    config_state = manager.config_state
+
+    # test state types
+    assert start_state.state_type == "start_{}".format(__name__)
+    assert config_state.state_type == "config_{}".format(__name__)
+
+    # test returned dataset
+    assert start_state.id == ds.state_id
+    base_ds = manager.get_dataset(ds.base_dataset_id)
+    assert config_state.id == base_ds.state_id
+    assert base_ds.is_root
+
+    # test state data
+    assert config_state.data == CONFIG
+    assert start_state.data["version"] == version
+    assert datetime.strptime(start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f") == now
