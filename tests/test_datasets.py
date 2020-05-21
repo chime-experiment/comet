@@ -227,9 +227,9 @@ def test_archiver_pushback(archiver):
 
     r.hset("datasets", "test_ds", json.dumps({"is_root": True, "state": "test_state"}))
     time.sleep(0.1)
-    r.llen("archive_dataset")
+    llen = r.llen("archive_dataset")
     assert llen == 1 or llen == 0
-    r.llen("archive_state")
+    llen = r.llen("archive_state")
     assert llen == 1 or llen == 0
 
     r.lpush(
