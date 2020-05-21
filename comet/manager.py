@@ -280,6 +280,11 @@ class Manager:
             time. Only supply this if you know what you're doing. This is for example to resend
             previously dumped states to the broker again after a crash.
 
+        Returns
+        -------
+        :class:`State`
+            The registered dataset state.
+
         Raises
         ------
         :class:`ManagerError`
@@ -321,7 +326,7 @@ class Manager:
         self.states[state_id] = state
         self.state_reg_time[state_id] = datetime.datetime.utcnow()
 
-        return state_id
+        return state
 
     def register_dataset(
         self, state, base_ds, state_type, root=False, dump=True, timestamp=None
@@ -330,8 +335,8 @@ class Manager:
 
         Parameters
         ----------
-        state : str
-            Hash / state ID of the state attached to this dataset.
+        state : str or :class:`State`
+            Hash / state ID or the state attached to this dataset.
         base_ds : str
             Hash / dataset ID of the base dataset or `None` if this is a root dataset.
         state_type : str
@@ -346,6 +351,11 @@ class Manager:
             time. Only supply this if you know what you're doing. This is for example to resend
             previously dumped datasets to the broker again after a crash.
 
+        Returns
+        -------
+        :class:`Dataset`
+            The registered dataset.
+
         Raises
         ------
         :class:`ManagerError`
@@ -356,10 +366,23 @@ class Manager:
             If the broker can't be reached.
 
         """
+        # check type of state
+        if isinstance(state, State):
+            state = state.id
         if not isinstance(state, str):
             raise ManagerError(
                 "state needs to be a hash (str) (is `{}`).".format(type(state).__name__)
             )
+
+        # check type of base dataset
+        if isinstance(base_ds, Dataset):
+            base_ds = base_ds.id
+        if not (isinstance(base_ds, str) or (root and base_ds is None)):
+            raise ManagerError(
+                "base_ds needs to be a hash (str) or `None` if this is a root dataset (base_ds "
+                "is `{}`).".format(type(base_ds).__name__)
+            )
+
         if not self.start_state:
             raise ManagerError(
                 "Start has to be registered before anything else "
@@ -382,7 +405,7 @@ class Manager:
 
         self.datasets[ds_id] = ds
 
-        return ds_id
+        return ds
 
     def _send(self, endpoint, data, rtype="post"):
         command = getattr(requests, rtype)

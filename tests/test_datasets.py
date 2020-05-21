@@ -111,9 +111,9 @@ def archiver(broker):
 
 @pytest.fixture(scope="session", autouse=False)
 def simple_ds(manager):
-    state_id = manager.register_state({"foo": "bar"}, "test")
-    dset_id = manager.register_dataset(state_id, None, "test", True)
-    yield (dset_id, state_id)
+    state = manager.register_state({"foo": "bar"}, "test")
+    dset = manager.register_dataset(state.id, None, "test", True)
+    yield (dset.id, state.id)
 
 
 def test_hash(manager):
@@ -253,21 +253,21 @@ def test_status(simple_ds, manager):
 
 def test_gather_update(simple_ds, manager, broker):
     root = simple_ds[0]
-    state_id = manager.register_state({"f00": "b4r"}, "t3st")
-    dset_id0 = manager.register_dataset(state_id, root, "test", False)
-    state_id = manager.register_state({"f00": "br"}, "t3st")
-    dset_id1 = manager.register_dataset(state_id, dset_id0, "test", False)
-    state_id = manager.register_state({"f00": "b4"}, "t3st")
-    dset_id2 = manager.register_dataset(state_id, dset_id1, "test", False)
+    state = manager.register_state({"f00": "b4r"}, "t3st")
+    dset0 = manager.register_dataset(state.id, root, "test", False)
+    state = manager.register_state({"f00": "br"}, "t3st")
+    dset1 = manager.register_dataset(state.id, dset0.id, "test", False)
+    state = manager.register_state({"f00": "b4"}, "t3st")
+    dset2 = manager.register_dataset(state.id, dset1.id, "test", False)
 
     result = requests.post(
         "http://localhost:{}/update-datasets".format(PORT),
-        json={"ds_id": dset_id2, "ts": 0, "roots": [root]},
+        json={"ds_id": dset2.id, "ts": 0, "roots": [root]},
     ).json()
     assert "datasets" in result
-    assert dset_id0 in result["datasets"]
-    assert dset_id1 in result["datasets"]
-    assert dset_id2 in result["datasets"]
+    assert dset0.id in result["datasets"]
+    assert dset1.id in result["datasets"]
+    assert dset2.id in result["datasets"]
 
 
 def test_get_dataset(simple_ds, manager_new, broker):
