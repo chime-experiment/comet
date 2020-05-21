@@ -6,6 +6,7 @@ Move comet broker data from redis to a mysql database
 
 import datetime
 import logging
+from peewee import DoesNotExist
 import orjson as json
 import random
 import redis
@@ -210,6 +211,15 @@ class Archiver:
             logger.error(
                 "Failure archiving dataset (DB doesn't know the referenced base dataset): {}".format(
                     data
+                )
+            )
+            self._pushback("archive_dataset", data)
+            return
+        # This is because these peewee exception names sometimes change somehow?
+        except DoesNotExist as err:
+            logger.error(
+                "Failure archiving dataset {} (DB doesn't know something referenced by it): {}".format(
+                    data, err
                 )
             )
             self._pushback("archive_dataset", data)
