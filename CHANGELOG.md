@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+
+
+### [20.6.0](https://github.com/chime-experiment/comet/compare/2020.04.0...20.6.0) (2020-06-11)
+
+
+### Bug Fixes
+
+* **archiver:** also catch peewee exceptions if they are renamed again ([01cc999](https://github.com/chime-experiment/comet/commit/01cc9996fa49979f109a91ee84a1f833ff6efef7))
+
+
+### Features
+
+* **manager:** add option register_state(register_datasets) ([9f87039](https://github.com/chime-experiment/comet/commit/9f87039bf496742c05ee7c8e37ea061f409fecb2))
+* **manager:** register_* take and return the objects ([0ac148a](https://github.com/chime-experiment/comet/commit/0ac148ad8a3e1c8faa0deee7ec4619fc9b8a3b67))
+
+
+### BREAKING CHANGES
+
+* **manager:** Manager.start_state and config_state are State objects now, not IDs
+* **manager:** - manager.register_state does not return a state ID anymore, but a State
+object.
+- manager.register_dataset returns a Dataset object instead of an ID now.
+
+
+
+
 ### [2020.04.0](https://github.com/chime-experiment/comet/compare/2019.12.1...2020.04.0) (2020-04-10)
 
 
