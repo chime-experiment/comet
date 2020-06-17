@@ -20,6 +20,7 @@ import random
 import logging
 import redis as redis_sync
 import time
+import traceback
 
 from bisect import bisect_left
 from caput import time as caput_time
@@ -125,7 +126,12 @@ async def status(request):
         logger.debug("status: Received status request")
         return response.json({"running": True, "result": "success"})
     except Exception as e:
-        logger.error("status: received exception %s", e)
+        logger.error(
+            "status: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("status: finished")
@@ -150,7 +156,12 @@ async def get_states(request):
         logger.debug("states: {}".format(states))
         return response.json(reply)
     except Exception as e:
-        logger.error("get_states: received exception %s", e)
+        logger.error(
+            "states: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("get_states: finished")
@@ -174,7 +185,12 @@ async def get_datasets(request):
         logger.debug("datasets: {}".format(datasets))
         return response.json(reply)
     except Exception as e:
-        logger.error("get_datasets: received exception %s", e)
+        logger.error(
+            "datasets: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("get_datasets: finished")
@@ -277,7 +293,12 @@ async def register_state(request):
                 await redis.execute("hset", "requested_states", hash, time.time())
         return response.json(reply)
     except Exception as e:
-        logger.error("register-state: received exception %s", e)
+        logger.error(
+            "register-state: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("register-state: finished")
@@ -348,7 +369,12 @@ async def send_state(request):
             raise cancelled
         return response.json(reply)
     except Exception as e:
-        logger.error("send-state: received exception %s", e)
+        logger.error(
+            "send-state: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("send-state: finished")
@@ -419,7 +445,12 @@ async def register_dataset(request):
 
         return response.json(reply)
     except Exception as e:
-        logger.error("register-dataset: received exception %s", e)
+        logger.error(
+            "register-dataset: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("register-dataset: finished")
@@ -578,7 +609,12 @@ async def request_state(request):
         logger.debug("request-state: Replying with state {}".format(id))
         return response.json(reply)
     except Exception as e:
-        logger.error("request-state: received exception %s", e)
+        logger.error(
+            "request-state: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
         logger.debug("request-state: finished")
@@ -699,6 +735,7 @@ async def update_datasets(request):
     -H "Content-Type: application/json"
     http://localhost:12050/update-datasets
     """
+    start = time.time()
     try:
         ds_id = request.json["ds_id"]
         ts = request.json["ts"]
@@ -737,10 +774,15 @@ async def update_datasets(request):
         reply["result"] = "success"
         return response.json(reply)
     except Exception as e:
-        logger.error("update-datasets: received exception %s", e)
+        logger.error(
+            "update-datasets: threw exception {} while handling request from {}",
+            str(e),
+            request.ip,
+        )
+        traceback.print_exc()
         raise
     finally:
-        logger.debug("update-datasets: finished")
+        logger.debug("update-datasets: finished (took {}s)".format(time.time() - start))
 
 
 @app.route("/internal-state", methods=["GET"])
