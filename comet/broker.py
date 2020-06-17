@@ -513,33 +513,31 @@ async def gather_update(ts, roots):
     given roots that were registered after the given timestamp.
     """
     update = dict()
-    async with lock_datasets:
-        for root in roots:
+    for root in roots:
+        async with lock_datasets:
             # Get both dicts from redis concurrently:
             keys, tree = await asyncio.gather(
                 redis.execute("hget", "datasets_of_root_keys", root),
                 redis.execute("hget", "datasets_of_root", root),
             )
 
-            keys = reversed(json.loads(keys))
-            tree = list(reversed(json.loads(tree)))
+        keys = reversed(json.loads(keys))
+        tree = list(reversed(json.loads(tree)))
 
-            # The nodes in tree are ordered by their timestamp from new to
-            # old, so we are done as soon as we find an older timestamp than
-            # the given one.
-            tasks = []
-            for n, k in zip(tree, keys):
-                if k < ts:
-                    break
-                tasks.append(
-                    asyncio.ensure_future(redis.execute("hget", "datasets", n))
-                )
+        # The nodes in tree are ordered by their timestamp from new to
+        # old, so we are done as soon as we find an older timestamp than
+        # the given one.
+        tasks = []
+        for n, k in zip(tree, keys):
+            if k < ts:
+                break
+            tasks.append(asyncio.ensure_future(redis.execute("hget", "datasets", n)))
 
-            if tasks:
-                # Wait for all concurrent tasks (gather keeps their order)
-                tasks = await asyncio.gather(*tasks)
-                # put back together the root ds IDs and the datasets
-                update.update(dict(zip(tree, [json.loads(task) for task in tasks])))
+        if tasks:
+            # Wait for all concurrent tasks (gather keeps their order)
+            tasks = await asyncio.gather(*tasks)
+            # put back together the root ds IDs and the datasets
+            update.update(dict(zip(tree, [json.loads(task) for task in tasks])))
     return update
 
 
@@ -769,7 +767,8 @@ async def update_datasets(request):
 
         # add a timestamp to the result before gathering update
         reply["ts"] = caput_time.datetime_to_unix(datetime.datetime.utcnow())
-        reply["datasets"].update(await gather_update(ts, roots))
+        if roots:
+            reply["datasets"].update(await gather_update(ts, roots))
 
         reply["result"] = "success"
         return response.json(reply)
@@ -800,17 +799,11 @@ async def internal_state(request):
 
 async def tree(root):
     """Return a list of all nodes in the given tree."""
-    async with lock_datasets:
-        datasets_of_root = json.loads(
-            await redis.execute("hget", "datasets_of_root", root)
-        )
+    datasets_of_root = json.loads(await redis.execute("hget", "datasets_of_root", root))
 
-        # Request all datasets concurrently
-        # TODO: have redis fetch these all at once
-        dsets = await asyncio.gather(
-            *[redis.execute("hget", "datasets", n) for n in datasets_of_root]
-        )
-        tree = dict(zip(datasets_of_root, [json.loads(ds) for ds in dsets]))
+    # Request all datasets concurrently
+    dsets = await redis.execute("hmget", "datasets", *datasets_of_root)
+    tree = dict(zip(datasets_of_root, [json.loads(ds) for ds in dsets]))
     return tree
 
 

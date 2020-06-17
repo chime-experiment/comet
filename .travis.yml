@@ -39,6 +39,7 @@ before_install:
     - pip install pytest-asyncio
     - pip install locust
     - pip install future  # FIXME: somehow this doesn't get installed as a dependency of caput
+    - pip install aiohttp # Needed for test_stresstest
 
 install:
     - python -m pip install .
