@@ -749,7 +749,7 @@ async def update_datasets(request):
             logger.info("update-datasets: Dataset ID {} unknown.".format(ds_id))
             return response.json(reply)
 
-        if ts is 0:
+        if ts == 0:
             ts = caput_time.datetime_to_unix(datetime.datetime.min)
 
         # If the requested dataset is from a tree not known to the calling
