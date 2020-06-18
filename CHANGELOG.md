@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. See [standa
 
 
 
+### [20.6.1](https://github.com/chime-experiment/comet/compare/20.6.0...20.6.1) (2020-06-18)
+
+
+### Features
+
+* **broker:** improve failure logging ([09ebb00](https://github.com/chime-experiment/comet/commit/09ebb00e6d9a2d20303f5526b0903a5887ac1bcc))
+* **broker:** speed up /update-datasets ([ec922e9](https://github.com/chime-experiment/comet/commit/ec922e9d392c3a87cfc68d4ea881b1048d7acc7e))
+* **broker:** speed up gather_update ([6bde095](https://github.com/chime-experiment/comet/commit/6bde0954e5d915f491c074517b9766b52edbcaa4))
+
+
+
 ### [20.6.0](https://github.com/chime-experiment/comet/compare/2020.04.0...20.6.0) (2020-06-11)
 
 
