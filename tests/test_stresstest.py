@@ -3,6 +3,7 @@ import asyncio
 import os
 import time
 import pytest
+from random import shuffle
 import signal
 
 from datetime import datetime
@@ -37,7 +38,8 @@ def manager_and_dataset():
     manager = Manager("localhost", PORT)
 
     ds = manager.register_start(now, version, CONFIG, register_datasets=True)
-    return manager, ds
+    root_ds = manager.get_dataset(ds.id).base_dataset_id
+    return manager, ds, root_ds
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -62,12 +64,31 @@ async def fetch(session, url, json):
         return await response.text()
 
 
-async def sendalot(ds, start):
-    json = {"ds_id": ds, "ts": "0", "roots": []}
-    url = "http://localhost:{}/update-datasets".format(PORT)
+async def sendalot(ds, base_ds, root_ds, state, start):
+    json_update_ds = {"ds_id": ds, "ts": "0", "roots": []}
+    json_update_ds_with_roots = {"ds_id": ds, "ts": 0, "roots": [root_ds]}
+    url_update_ds = "http://localhost:{}/update-datasets".format(PORT)
+
+    json_register_state = {"hash": state}
+    url_register_state = "http://localhost:{}/register-state".format(PORT)
+
+    json_register_ds = {
+        "hash": ds,
+        "ds": {"base_dset": base_ds, "state": state, "is_root": False, "type": "fifth"},
+    }
+    url_register_ds = "http://localhost:{}/register-dataset".format(PORT)
+
     timeout = aiohttp.ClientTimeout(total=100)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        tasks = [fetch(session, url, json) for _ in range(250)]
+        tasks = [fetch(session, url_update_ds, json_update_ds) for _ in range(250)]
+        tasks += [
+            fetch(session, url_register_state, json_register_state) for _ in range(250)
+        ]
+        tasks += [fetch(session, url_register_ds, json_register_ds) for _ in range(250)]
+        tasks += [
+            fetch(session, url_update_ds, json_update_ds_with_roots) for _ in range(250)
+        ]
+        shuffle(tasks)
         try:
             return await asyncio.gather(*tasks)
         except Exception as err:
@@ -77,7 +98,7 @@ async def sendalot(ds, start):
 
 
 def test_stress_update_datasets(manager_and_dataset, broker):
-    manager, ds = manager_and_dataset
+    manager, ds, root_ds_id = manager_and_dataset
     s1 = manager.register_state({"a": 1}, "first")
     s2 = manager.register_state({"a": 2}, "second")
     s3 = manager.register_state({"a": 3}, "third")
@@ -86,10 +107,15 @@ def test_stress_update_datasets(manager_and_dataset, broker):
     ds = manager.register_dataset(s1, ds, "first")
     ds = manager.register_dataset(s2, ds, "second")
     ds = manager.register_dataset(s3, ds, "third")
-    ds = manager.register_dataset(s4, ds, "fourth")
-    ds = manager.register_dataset(s5, ds, "fifth")
+
+    for i in range(100):
+        state = manager.register_state({"foo": "bar"}, "filled_by_loop")
+        ds = manager.register_dataset(state, ds, "filled_by_loop")
+
+    base_ds = manager.register_dataset(s4, ds, "fourth")
+    ds = manager.register_dataset(s5, base_ds, "fifth")
 
     start = time.time()
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(sendalot(ds.id, start))
+    loop.run_until_complete(sendalot(ds.id, base_ds.id, root_ds_id, s5.id, start))
     print(time.time() - start)
