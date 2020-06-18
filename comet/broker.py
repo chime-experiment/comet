@@ -527,17 +527,14 @@ async def gather_update(ts, roots):
         # The nodes in tree are ordered by their timestamp from new to
         # old, so we are done as soon as we find an older timestamp than
         # the given one.
-        tasks = []
+        datasets = []
         for n, k in zip(tree, keys):
             if k < ts:
                 break
-            tasks.append(asyncio.ensure_future(redis.execute("hget", "datasets", n)))
-
-        if tasks:
-            # Wait for all concurrent tasks (gather keeps their order)
-            tasks = await asyncio.gather(*tasks)
-            # put back together the root ds IDs and the datasets
-            update.update(dict(zip(tree, [json.loads(task) for task in tasks])))
+            datasets.append(n)
+        if datasets:
+            results = await redis.execute("hmget", "datasets", *datasets)
+            update.update(dict(zip(tree, [json.loads(task) for task in results])))
     return update
 
 
