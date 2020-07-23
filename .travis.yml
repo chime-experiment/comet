@@ -37,6 +37,8 @@ before_install:
     - pip install pydocstyle
     - pip install pytest
     - pip install pytest-asyncio
+    - pip install codecov
+    - pip install pytest-cov
     - pip install locust
     - pip install future  # FIXME: somehow this doesn't get installed as a dependency of caput
     - pip install aiohttp # Needed for test_stresstest
@@ -56,9 +58,12 @@ script:
     # Run tests
     - export PYTHONPATH=.:$PYTHONPATH
     - cd tests
-    - pytest -x
+    - pytest -x --cov=comet
 
     # Clone kotekan and run some of its tests
     - mkdir skyfield_data
     - CAPUT_SKYFIELD_PATH=skyfield_data ./kotetest.sh
     - ccache -s || true
+
+after_success:
+    - codecov
