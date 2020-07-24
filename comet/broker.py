@@ -14,6 +14,7 @@ Available endpoints:
 """
 import aioredis
 import asyncio
+import contextvars
 import datetime
 import json
 import random
@@ -22,16 +23,14 @@ import redis as redis_sync
 import time
 import traceback
 
-from bisect import bisect_left
-from caput import time as caput_time
-from math import ceil
-from socket import socket
-from threading import Thread
-
-import contextvars
+from async_lru import alru_cache
 from sanic import Sanic
 from sanic import response
 from sanic.log import logger
+from socket import socket
+from threading import Thread
+
+from caput import time as caput_time
 
 from . import __version__
 from .manager import Manager, TIMESTAMP_FORMAT
@@ -270,7 +269,7 @@ async def register_state(request):
 
         # Lock states and check if the received state is already known.
         async with lock_states:
-            state = await redis.execute("hget", "states", hash)
+            state = await get_state(hash, wait=False)
             if state is None:
                 # we don't know this state, did we request it already?
                 # After REQUEST_STATE_TIMEOUT we request it again.
@@ -327,11 +326,8 @@ async def send_state(request):
 
         # Lock states and check if we know this state already.
         async with lock_states:
-            found = await redis.execute("hget", "states", hash)
+            found = await get_state(hash, wait=False)
             if found is not None:
-                # this string needs to be deserialized, contains a state
-                found = json.loads(found)
-
                 # if we know it already, does it differ?
                 if found != state:
                     reply["result"] = (
@@ -413,10 +409,8 @@ async def register_dataset(request):
 
         # Lack datasets and check if dataset already known.
         async with lock_datasets:
-            found = await redis.execute("hget", "datasets", hash)
+            found = await get_dataset(hash, wait=False)
             if found is not None:
-                # this string needs to be deserialized, contains a dataset
-                found = json.loads(found)
                 # if we know it already, does it differ?
                 if found != ds:
                     reply["result"] = (
@@ -428,7 +422,7 @@ async def register_dataset(request):
                     reply["result"] = "success"
             elif dataset_valid and root is not None:
                 # save the dataset
-                await save_dataset(hash, ds, root)
+                await redis.execute("hset", "datasets", hash, json.dumps(ds))
 
                 reply["result"] = "success"
                 archive_ds = True
@@ -456,99 +450,16 @@ async def register_dataset(request):
         logger.debug("register-dataset: finished")
 
 
-async def save_dataset(hash, ds, root):
-    """Save the given dataset, its hash and a current timestamp.
-
-    This should be called while a lock on the datasets is held.
-    """
-    # add a timestamp to the dataset (ms precision)
-    ts = caput_time.datetime_to_unix(datetime.datetime.utcnow())
-
-    # get dicts from redis concurrently
-    task = asyncio.ensure_future(redis.execute("hget", "datasets_of_root", root))
-    datasets_of_root_keys = await redis.execute("hget", "datasets_of_root_keys", root)
-    (task,), _ = await asyncio.wait({task})
-    datasets_of_root = task.result()
-
-    # create entry if this is the first node with that root
-    if not datasets_of_root:
-        datasets_of_root = list()
-        datasets_of_root_keys = list()
-    else:
-        datasets_of_root = json.loads(datasets_of_root)
-        datasets_of_root_keys = json.loads(datasets_of_root_keys)
-
-    # Determine where to insert dataset ID.
-    i = bisect_left(datasets_of_root_keys, ts)
-
-    # Insert timestamp in keys list.
-    datasets_of_root_keys.insert(i, ts)
-
-    # Insert the dataset ID itself in the corresponding place.
-    datasets_of_root.insert(i, hash)
-
-    # save changes
-    task1 = asyncio.ensure_future(
-        redis.execute("hset", "datasets_of_root", root, json.dumps(datasets_of_root))
-    )
-    task2 = asyncio.ensure_future(
-        redis.execute(
-            "hset", "datasets_of_root_keys", root, json.dumps(datasets_of_root_keys)
-        )
-    )
-
-    # Insert the dataset in the hashmap
-    task3 = asyncio.ensure_future(
-        redis.execute("hset", "datasets", hash, json.dumps(ds))
-    )
-
-    # Wait for all concurrent tasks
-    await asyncio.wait({task1, task2, task3})
-
-
-async def gather_update(ts, roots):
-    """Gather the update for a given time and roots.
-
-    Returns a dict of dataset ID -> dataset with all datasets with the
-    given roots that were registered after the given timestamp.
-    """
-    update = dict()
-    for root in roots:
-        async with lock_datasets:
-            # Get both dicts from redis concurrently:
-            keys, tree = await asyncio.gather(
-                redis.execute("hget", "datasets_of_root_keys", root),
-                redis.execute("hget", "datasets_of_root", root),
-            )
-
-        keys = reversed(json.loads(keys))
-        tree = list(reversed(json.loads(tree)))
-
-        # The nodes in tree are ordered by their timestamp from new to
-        # old, so we are done as soon as we find an older timestamp than
-        # the given one.
-        datasets = []
-        for n, k in zip(tree, keys):
-            if k < ts:
-                break
-            datasets.append(n)
-        if datasets:
-            results = await redis.execute("hmget", "datasets", *datasets)
-            update.update(dict(zip(tree, [json.loads(task) for task in results])))
-    return update
-
-
 async def find_root(hash, ds):
     """Return the dataset Id of the root of this dataset."""
-    root = hash
     while not ds["is_root"]:
-        root = ds["base_dset"]
-        found = await wait_for_dset(root)
-        if not found:
-            logger.error("find_root: dataset {} not found.".format(hash))
+        try:
+            hash = ds["base_dset"]
+            ds = await get_dataset(hash)
+        except TimeoutError as err:
+            logger.error("find_root: dataset {} not found: {}".format(hash, err))
             return None
-        ds = json.loads(await redis.execute("hget", "datasets", root))
-    return root
+    return hash
 
 
 async def check_dataset(ds):
@@ -559,16 +470,20 @@ async def check_dataset(ds):
     to exist.
     """
     logger.debug("check_dataset: Checking dataset: {}".format(ds))
-    found = await wait_for_state(ds["state"])
-    if not found:
-        logger.debug("check_dataset: State of dataset unknown: {}".format(ds))
+    try:
+        await get_state(ds["state"])
+    except TimeoutError as err:
+        logger.debug("check_dataset: State of dataset {} unknown: {}".format(ds, err))
         return False
     if ds["is_root"]:
         logger.debug("check_dataset: dataset {} OK".format(ds))
         return True
-    found = await wait_for_dset(ds["base_dset"])
-    if not found:
-        logger.debug("check_dataset: Base dataset of dataset unknown: {}".format(ds))
+    try:
+        await get_dataset(ds["base_dset"])
+    except TimeoutError as err:
+        logger.debug(
+            "check_dataset: Base dataset of dataset {} unknown: {}".format(ds, err)
+        )
         return False
     return True
 
@@ -591,14 +506,13 @@ async def request_state(request):
 
         # Do we know this state ID?
         logger.debug("request-state: waiting for state ID {}".format(id))
-        found = await wait_for_state(id)
-        if not found:
+        try:
+            reply["state"] = await get_state(id)
+        except TimeoutError as err:
             reply["result"] = "state ID {} unknown to broker.".format(id)
-            logger.info("request-state: State {} unknown to broker".format(id))
+            logger.info("request-state: State {} unknown to broker: {}".format(id, err))
             return response.json(reply)
         logger.debug("request-state: found state ID {}".format(id))
-
-        reply["state"] = json.loads(await redis.execute("hget", "states", id))
 
         reply["result"] = "success"
         logger.debug("request-state: Replying with state {}".format(id))
@@ -713,14 +627,77 @@ wait_for_state = lambda id: wait_for_x(
 )
 
 
+@alru_cache(maxsize=10000)
+async def get_dataset(ds_id, wait=True):
+    """
+    Get a dataset by ID from redis (LRU cached).
+
+    Parameters
+    ----------
+    ds_id : str
+        Dataset ID
+    wait : bool
+        Wait before deciding that we don't have the dataset.
+
+    Returns
+    -------
+    Dataset
+        The dataset from cache or redis. `None` if the dataset doesn't exist and wait was `False`.
+
+    Raises
+    ------
+    TimeoutError
+        If waiting for the dataset timed out.
+    """
+    if wait:
+        # Check if existing and wait if not
+        found = await wait_for_dset(ds_id)
+        if not found:
+            raise TimeoutError("Dataset {} not found: Timeout.".format(ds_id))
+
+    # Get it from redis
+    ds = await redis.execute("hget", "datasets", ds_id)
+    return json.loads(ds) if ds is not None else None
+
+
+@alru_cache(maxsize=1000)
+async def get_state(state_id, wait=True):
+    """
+    Get a state by ID from redis (LRU cached).
+
+    Parameters
+    ----------
+    state_id : str
+        State ID
+    wait : bool
+        Wait before deciding that we don't have the state.
+
+    Returns
+    -------
+    State
+        The state from cache or redis. `None` if the state doesn't exist and wait was `False`.
+
+    Raises
+    ------
+    TimeoutError
+        If waiting for the state timed out.
+    """
+    if wait:
+        # Check if existing and wait if not
+        found = await wait_for_state(state_id)
+        if not found:
+            raise TimeoutError("State {} not found: Timeout.".format(state_id))
+
+    # Get it from redis
+    state = await redis.execute("hget", "states", state_id)
+    return json.loads(state) if state is not None else None
+
+
 @app.route("/update-datasets", methods=["POST"])
 async def update_datasets(request):
     """Get an update on the datasets.
 
-    Request all nodes that where added after the given timestamp.
-    If the root of the given dataset is not among the given known roots,
-    All datasets with the same root as the given dataset are included in the
-    returned update additionally.
+    Returns all datasets between the given dataset and its root dataset.
 
     This is called by kotekan's datasetManager.
 
@@ -733,39 +710,25 @@ async def update_datasets(request):
     start = time.time()
     try:
         ds_id = request.json["ds_id"]
-        ts = request.json["ts"]
-        roots = request.json["roots"]
-        logger.info("/update-datasets {} {} {}.".format(ds_id, ts, roots))
+        logger.info("/update-datasets {}.".format(ds_id))
 
         reply = dict()
         reply["datasets"] = dict()
 
-        # Do we know this ds ID?
-        found = await wait_for_dset(ds_id)
-        if not found:
-            reply[
-                "result"
-            ] = "update-datasets: Dataset ID {} unknown to broker.".format(ds_id)
-            logger.info("update-datasets: Dataset ID {} unknown.".format(ds_id))
-            return response.json(reply)
-
-        if ts == 0:
-            ts = caput_time.datetime_to_unix(datetime.datetime.min)
-
-        # If the requested dataset is from a tree not known to the calling
-        # instance, send them that whole tree.
-        ds = json.loads(await redis.execute("hget", "datasets", ds_id))
-        root = await find_root(ds_id, ds)
-        if root is None:
-            logger.error("update-datasets: Root of dataset {} not found.".format(ds_id))
-            reply["result"] = "Root of dataset {} not found.".format(ds_id)
-        if root not in roots:
-            reply["datasets"] = await tree(root)
-
-        # add a timestamp to the result before gathering update
-        reply["ts"] = caput_time.datetime_to_unix(datetime.datetime.utcnow())
-        if roots:
-            reply["datasets"].update(await gather_update(ts, roots))
+        # Traverse up the tree and collect all datasets until the root
+        while True:
+            try:
+                ds = await get_dataset(ds_id)
+            except TimeoutError:
+                reply[
+                    "result"
+                ] = "update-datasets: Dataset ID {} unknown to broker.".format(ds_id)
+                logger.info("update-datasets: Dataset ID {} unknown.".format(ds_id))
+                return response.json(reply)
+            reply["datasets"][ds_id] = ds
+            if ds["is_root"]:
+                break
+            ds_id = ds["base_dset"]
 
         reply["result"] = "success"
         return response.json(reply)
@@ -790,18 +753,10 @@ async def internal_state(request):
         "states_locked": lock_states.locked(),
         "waiting_datasets": list(waiting_datasets.keys()),
         "waiting_states": list(waiting_states.keys()),
+        "datasets_cache": get_dataset.cache_info(),
+        "states_cache": get_state.cache_info(),
     }
     return response.json(state)
-
-
-async def tree(root):
-    """Return a list of all nodes in the given tree."""
-    datasets_of_root = json.loads(await redis.execute("hget", "datasets_of_root", root))
-
-    # Request all datasets concurrently
-    dsets = await redis.execute("hmget", "datasets", *datasets_of_root)
-    tree = dict(zip(datasets_of_root, [json.loads(ds) for ds in dsets]))
-    return tree
 
 
 class Broker:

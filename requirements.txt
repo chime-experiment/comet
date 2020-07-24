@@ -1,4 +1,5 @@
 aioredis
+async_lru
 redis
 requests
 sanic==20.3.0 ; python_version >= '3.6'

@@ -55,11 +55,6 @@ class Manager:
         self.state_reg_time = dict()
         self.datasets = dict()
 
-        # set this to 0 so we get a full update from the broker the first time
-        self._dataset_update_timestamp = 0
-
-        self._known_root_ds_ids = {}
-
     def register_start(self, start_time, version, config=None, register_datasets=False):
         """Register a startup with the broker.
 
@@ -606,21 +601,14 @@ class Manager:
         """
         logger.debug("Requesting dataset update for ID {}...".format(dataset_id))
         data = {
-            "ts": self._dataset_update_timestamp,
             "ds_id": dataset_id,
-            "roots": self._known_root_ds_ids,
         }
         reply = self._send(UPDATE_DATASETS, data, "post")
-
-        # save update timestamp for next time
-        self._dataset_update_timestamp = reply["ts"]
 
         # save new datasets
         for id, ds_ in reply["datasets"].items():
             ds = Dataset.from_dict(ds_, id)
             self.datasets[id] = ds
-            if ds.is_root:
-                self._known_root_ds_ids[id] = ds.id
 
     def broker_status(self):
         """
