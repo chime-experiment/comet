@@ -485,6 +485,8 @@ async def check_dataset(ds):
             "check_dataset: Base dataset of dataset {} unknown: {}".format(ds, err)
         )
         return False
+
+    logger.debug("check_dataset: dataset {} OK".format(ds))
     return True
 
 
