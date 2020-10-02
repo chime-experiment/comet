@@ -15,7 +15,7 @@ class Dataset:
         Type of the dataset state of this dataset.
     dataset_id : str
         (optional) ID (hash) of this dataset. If not supplied, it's generated internally.
-    base_dataset_id : str
+    base_dataset_id : str or None
         ID of the base dataset or `None` if this is a root dataset (default `None`).
     is_root : bool
         `True`, if this is a root dataset (default `False`).

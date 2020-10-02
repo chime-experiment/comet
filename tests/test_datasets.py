@@ -11,6 +11,8 @@ from subprocess import Popen
 
 from comet import Manager, BrokerError, State, Dataset
 from comet.hash import hash_dictionary
+from comet.manager import REGISTER_DATASET
+
 import chimedb.dataset
 import chimedb.core
 
@@ -357,3 +359,34 @@ def test_register_start_dataset_automated(manager_and_dataset, broker):
     assert config_state.data == CONFIG
     assert start_state.data["version"] == version
     assert datetime.strptime(start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f") == now
+
+
+def test_lru_cache(broker, manager_low_timeout):
+    """Test the dataset cache doesn't cache unknown datasets as None."""
+
+    ds_id = "doesntexist"
+
+    # Request an unknown dataset
+    with pytest.raises(BrokerError):
+        manager_low_timeout.get_dataset(ds_id)
+    state = manager_low_timeout.register_state(data={"foo": "bar"}, state_type="test")
+    assert state is not None
+    assert isinstance(state, State)
+
+    # Now register it (manurally, to set the ID)
+    ds = Dataset(
+        state_id=state.id,
+        state_type="test_lru_cache",
+        dataset_id=ds_id,
+        base_dataset_id=None,
+        is_root=True,
+    )
+    request = {"hash": ds_id, "ds": ds.to_dict()}
+    result = manager_low_timeout._send(REGISTER_DATASET, request)
+    assert result is not None
+    assert result == {"result": "success"}
+
+    # Request again, it should exist now.
+    same_ds = manager_low_timeout.get_dataset(ds_id)
+    assert same_ds is not None
+    assert same_ds.to_dict() == ds.to_dict()

@@ -17,3 +17,15 @@ class BrokerError(CometError):
     """There was an error registering states or datasets with the broker."""
 
     pass
+
+
+class DatasetNotFoundError(CometError):
+    """The requested dataset was not found."""
+
+    pass
+
+
+class StateNotFoundError(CometError):
+    """The requested state was not found."""
+
+    pass

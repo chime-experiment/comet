@@ -34,7 +34,7 @@ from caput import time as caput_time
 
 from . import __version__
 from .manager import Manager, TIMESTAMP_FORMAT
-from .exception import CometError
+from .exception import CometError, DatasetNotFoundError, StateNotFoundError
 
 
 REQUESTED_STATE_TIMEOUT = 35
@@ -269,8 +269,9 @@ async def register_state(request):
 
         # Lock states and check if the received state is already known.
         async with lock_states:
-            state = await get_state(hash, wait=False)
-            if state is None:
+            try:
+                await get_state(hash, wait=False)
+            except StateNotFoundError:
                 # we don't know this state, did we request it already?
                 # After REQUEST_STATE_TIMEOUT we request it again.
                 request_time = await redis.execute("hget", "requested_states", hash)
@@ -326,8 +327,16 @@ async def send_state(request):
 
         # Lock states and check if we know this state already.
         async with lock_states:
-            found = await get_state(hash, wait=False)
-            if found is not None:
+            try:
+                found = await get_state(hash, wait=False)
+            except StateNotFoundError:
+                await redis.execute("hset", "states", hash, json.dumps(state))
+                reply["result"] = "success"
+                archive_state = True
+
+                # Notify anything waiting for this state to arrive
+                signal_created(hash, "state", lock_states, waiting_states)
+            else:
                 # if we know it already, does it differ?
                 if found != state:
                     reply["result"] = (
@@ -338,13 +347,6 @@ async def send_state(request):
                     logger.warning("send-state: {}".format(reply["result"]))
                 else:
                     reply["result"] = "success"
-            else:
-                await redis.execute("hset", "states", hash, json.dumps(state))
-                reply["result"] = "success"
-                archive_state = True
-
-                # Notify anything waiting for this state to arrive
-                signal_created(hash, "state", lock_states, waiting_states)
 
         # Remove it from the set of requested states (if it's in there.)
         try:
@@ -409,8 +411,19 @@ async def register_dataset(request):
 
         # Lack datasets and check if dataset already known.
         async with lock_datasets:
-            found = await get_dataset(hash, wait=False)
-            if found is not None:
+            try:
+                found = await get_dataset(hash, wait=False)
+            except DatasetNotFoundError:
+                if dataset_valid and root is not None:
+                    # save the dataset
+                    await redis.execute("hset", "datasets", hash, json.dumps(ds))
+
+                    reply["result"] = "success"
+                    archive_ds = True
+
+                    # Notify anything waiting for this dataset to arrive
+                    signal_created(hash, "dataset", lock_datasets, waiting_datasets)
+            else:
                 # if we know it already, does it differ?
                 if found != ds:
                     reply["result"] = (
@@ -420,15 +433,6 @@ async def register_dataset(request):
                     logger.warning("register-dataset: {}".format(reply["result"]))
                 else:
                     reply["result"] = "success"
-            elif dataset_valid and root is not None:
-                # save the dataset
-                await redis.execute("hset", "datasets", hash, json.dumps(ds))
-
-                reply["result"] = "success"
-                archive_ds = True
-
-                # Notify anything waiting for this dataset to arrive
-                signal_created(hash, "dataset", lock_datasets, waiting_datasets)
 
         if archive_ds:
             await asyncio.shield(archive("dataset", request.json))
@@ -453,10 +457,10 @@ async def register_dataset(request):
 async def find_root(hash, ds):
     """Return the dataset Id of the root of this dataset."""
     while not ds["is_root"]:
+        hash = ds["base_dset"]
         try:
-            hash = ds["base_dset"]
             ds = await get_dataset(hash)
-        except TimeoutError as err:
+        except DatasetNotFoundError as err:
             logger.error("find_root: dataset {} not found: {}".format(hash, err))
             return None
     return hash
@@ -472,7 +476,7 @@ async def check_dataset(ds):
     logger.debug("check_dataset: Checking dataset: {}".format(ds))
     try:
         await get_state(ds["state"])
-    except TimeoutError as err:
+    except StateNotFoundError as err:
         logger.debug("check_dataset: State of dataset {} unknown: {}".format(ds, err))
         return False
     if ds["is_root"]:
@@ -480,7 +484,7 @@ async def check_dataset(ds):
         return True
     try:
         await get_dataset(ds["base_dset"])
-    except TimeoutError as err:
+    except DatasetNotFoundError as err:
         logger.debug(
             "check_dataset: Base dataset of dataset {} unknown: {}".format(ds, err)
         )
@@ -510,9 +514,10 @@ async def request_state(request):
         logger.debug("request-state: waiting for state ID {}".format(id))
         try:
             reply["state"] = await get_state(id)
-        except TimeoutError as err:
-            reply["result"] = "state ID {} unknown to broker.".format(id)
-            logger.info("request-state: State {} unknown to broker: {}".format(id, err))
+        except StateNotFoundError as err:
+            msg = "request-state: State {} unknown to broker: {}".format(id, err)
+            reply["result"] = msg
+            logger.info(msg)
             return response.json(reply)
         logger.debug("request-state: found state ID {}".format(id))
 
@@ -629,7 +634,7 @@ wait_for_state = lambda id: wait_for_x(
 )
 
 
-@alru_cache(maxsize=10000)
+@alru_cache(maxsize=10000, cache_exceptions=False)
 async def get_dataset(ds_id, wait=True):
     """
     Get a dataset by ID from redis (LRU cached).
@@ -644,25 +649,28 @@ async def get_dataset(ds_id, wait=True):
     Returns
     -------
     Dataset
-        The dataset from cache or redis. `None` if the dataset doesn't exist and wait was `False`.
+        The dataset from cache or redis.
 
     Raises
     ------
-    TimeoutError
-        If waiting for the dataset timed out.
+    DatasetNotFoundError
+        If the dataset doesn't exist or waiting for the dataset timed out.
+
     """
     if wait:
         # Check if existing and wait if not
         found = await wait_for_dset(ds_id)
         if not found:
-            raise TimeoutError("Dataset {} not found: Timeout.".format(ds_id))
+            raise DatasetNotFoundError("Dataset {} not found: Timeout.".format(ds_id))
 
     # Get it from redis
     ds = await redis.execute("hget", "datasets", ds_id)
-    return json.loads(ds) if ds is not None else None
+    if ds is None:
+        raise DatasetNotFoundError("Dataset {} unknown to broker.".format(ds_id))
+    return json.loads(ds)
 
 
-@alru_cache(maxsize=1000)
+@alru_cache(maxsize=1000, cache_exceptions=False)
 async def get_state(state_id, wait=True):
     """
     Get a state by ID from redis (LRU cached).
@@ -677,22 +685,24 @@ async def get_state(state_id, wait=True):
     Returns
     -------
     State
-        The state from cache or redis. `None` if the state doesn't exist and wait was `False`.
+        The state from cache or redis.
 
     Raises
     ------
-    TimeoutError
-        If waiting for the state timed out.
+    StateNotFoundError
+        If the state doesn't exist or waiting for the state timed out.
     """
     if wait:
         # Check if existing and wait if not
         found = await wait_for_state(state_id)
         if not found:
-            raise TimeoutError("State {} not found: Timeout.".format(state_id))
+            raise StateNotFoundError("State {} not found: Timeout.".format(state_id))
 
     # Get it from redis
     state = await redis.execute("hget", "states", state_id)
-    return json.loads(state) if state is not None else None
+    if state is None:
+        raise StateNotFoundError("State {} unknown to broker.".format(state_id))
+    return json.loads(state)
 
 
 @app.route("/update-datasets", methods=["POST"])
@@ -721,11 +731,10 @@ async def update_datasets(request):
         while True:
             try:
                 ds = await get_dataset(ds_id)
-            except TimeoutError:
-                reply[
-                    "result"
-                ] = "update-datasets: Dataset ID {} unknown to broker.".format(ds_id)
-                logger.info("update-datasets: Dataset ID {} unknown.".format(ds_id))
+            except DatasetNotFoundError as err:
+                msg = "update-datasets: {}.".format(err)
+                reply["result"] = msg
+                logger.info(msg)
                 return response.json(reply)
             reply["datasets"][ds_id] = ds
             if ds["is_root"]:
