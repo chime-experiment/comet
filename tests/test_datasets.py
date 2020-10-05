@@ -373,7 +373,7 @@ def test_lru_cache(broker, manager_low_timeout):
     assert state is not None
     assert isinstance(state, State)
 
-    # Now register it (manurally, to set the ID)
+    # Now register it (manually, to set the ID)
     ds = Dataset(
         state_id=state.id,
         state_type="test_lru_cache",
