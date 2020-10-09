@@ -115,7 +115,7 @@ class Manager:
         if not isinstance(version, str):
             raise ManagerError(
                 "version needs to be of type 'str' (is {}).".format(
-                    type(start_time).__name__
+                    type(version).__name__
                 )
             )
         if self.start_state:
