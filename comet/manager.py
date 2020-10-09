@@ -8,6 +8,7 @@ import datetime
 import inspect
 import logging
 import json
+import sys
 
 import requests
 
@@ -112,6 +113,9 @@ class Manager:
                     type(start_time).__name__
                 )
             )
+        # TODO python2 support
+        if sys.version_info < (3, 0) and isinstance(version, unicode):
+            version = version.encode("utf-8")
         if not isinstance(version, str):
             raise ManagerError(
                 "version needs to be of type 'str' (is {}).".format(
