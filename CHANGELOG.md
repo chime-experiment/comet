@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. See [standa
 
 
 
+# [20.10.1](https://github.com/chime-experiment/comet/compare/v20.10.0...v20.10.1) (2020-10-09)
+
+
+### Bug Fixes
+
+* **manager:** accept version str to be unicode ([8e7aa09](https://github.com/chime-experiment/comet/commit/8e7aa09bdd2314efa426c81119433e67b118b188)), closes [#91](https://github.com/chime-experiment/comet/issues/91)
+* **manager:** version param error message prints wrong type ([4e08ccb](https://github.com/chime-experiment/comet/commit/4e08ccb5c9f1e51be69a7e26f6196c5179469748)), closes [#90](https://github.com/chime-experiment/comet/issues/90)
+
+
+
 ### [20.10.0](https://github.com/chime-experiment/comet/compare/v20.7.0...v20.10.0) (2020-10-05)
 
 
