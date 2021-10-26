@@ -149,7 +149,7 @@ async def get_states(request):
     try:
         logger.debug("get_states: Received states request")
 
-        states = await redis.execute("hkeys", "states")
+        states = await redis.execute_command("hkeys", "states")
         reply = {"result": "success", "states": states}
 
         logger.debug("states: {}".format(states))
@@ -178,7 +178,7 @@ async def get_datasets(request):
     try:
         logger.debug("get_datasets: Received datasets request")
 
-        datasets = await redis.execute("hkeys", "datasets")
+        datasets = await redis.execute_command("hkeys", "datasets")
         reply = {"result": "success", "datasets": datasets}
 
         logger.debug("datasets: {}".format(datasets))
@@ -249,7 +249,7 @@ async def archive(data_type, json_data):
                 )
             )
     # push it into list for archiver
-    await redis.execute(
+    await redis.execute_command(
         "lpush",
         "archive_{}".format(data_type),
         json.dumps({"hash": json_data["hash"], "time": json_data["time"]}),
@@ -274,7 +274,7 @@ async def register_state(request):
             except StateNotFoundError:
                 # we don't know this state, did we request it already?
                 # After REQUEST_STATE_TIMEOUT we request it again.
-                request_time = await redis.execute("hget", "requested_states", hash)
+                request_time = await redis.execute_command("hget", "requested_states", hash)
                 if request_time:
                     request_time = float(request_time)
                     if request_time > time.time() - REQUESTED_STATE_TIMEOUT:
@@ -290,7 +290,7 @@ async def register_state(request):
                 reply["request"] = "get_state"
                 reply["hash"] = hash
                 logger.debug("register-state: Asking for state, hash: {}".format(hash))
-                await redis.execute("hset", "requested_states", hash, time.time())
+                await redis.execute_command("hset", "requested_states", hash, time.time())
         return response.json(reply)
     except Exception as e:
         logger.error(
@@ -330,7 +330,7 @@ async def send_state(request):
             try:
                 found = await get_state(hash, wait=False)
             except StateNotFoundError:
-                await redis.execute("hset", "states", hash, json.dumps(state))
+                await redis.execute_command("hset", "states", hash, json.dumps(state))
                 reply["result"] = "success"
                 archive_state = True
 
@@ -350,7 +350,7 @@ async def send_state(request):
 
         # Remove it from the set of requested states (if it's in there.)
         try:
-            await asyncio.shield(redis.execute("hdel", "requested_states", hash))
+            await asyncio.shield(redis.execute_command("hdel", "requested_states", hash))
         except asyncio.CancelledError as err:
             logger.info(
                 "/send-state {}: Cancelled while removing requested state. Ignoring...".format(
@@ -416,7 +416,7 @@ async def register_dataset(request):
             except DatasetNotFoundError:
                 if dataset_valid and root is not None:
                     # save the dataset
-                    await redis.execute("hset", "datasets", hash, json.dumps(ds))
+                    await redis.execute_command("hset", "datasets", hash, json.dumps(ds))
 
                     reply["result"] = "success"
                     archive_ds = True
@@ -586,14 +586,14 @@ async def wait_for_x(id, name, lock, redis_hash, event_dict):
     """
 
     # Test first before acquiring the lock as it means we might not need to wait
-    if await redis.execute("hexists", redis_hash, id):
+    if await redis.execute_command("hexists", redis_hash, id):
         return True
 
     logger.debug(f"wait_for_{name}: Waiting for {name} {id}")
 
     async with lock:
         # While we are locked, test again to ensure that we have the dataset
-        if await redis.execute("hexists", redis_hash, id):
+        if await redis.execute_command("hexists", redis_hash, id):
             return True
 
         if id not in event_dict:
@@ -614,7 +614,7 @@ async def wait_for_x(id, name, lock, redis_hash, event_dict):
         )
         return False
 
-    if await redis.execute("hexists", redis_hash, id):
+    if await redis.execute_command("hexists", redis_hash, id):
         logger.debug(f"wait_for_{name}: Found {name} {id}")
         return True
     else:
@@ -664,7 +664,7 @@ async def get_dataset(ds_id, wait=True):
             raise DatasetNotFoundError("Dataset {} not found: Timeout.".format(ds_id))
 
     # Get it from redis
-    ds = await redis.execute("hget", "datasets", ds_id)
+    ds = await redis.execute_command("hget", "datasets", ds_id)
     if ds is None:
         raise DatasetNotFoundError("Dataset {} unknown to broker.".format(ds_id))
     return json.loads(ds)
@@ -699,7 +699,7 @@ async def get_state(state_id, wait=True):
             raise StateNotFoundError("State {} not found: Timeout.".format(state_id))
 
     # Get it from redis
-    state = await redis.execute("hget", "states", state_id)
+    state = await redis.execute_command("hget", "states", state_id)
     if state is None:
         raise StateNotFoundError("State {} unknown to broker.".format(state_id))
     return json.loads(state)
@@ -878,16 +878,11 @@ async def _create_locks(_, loop):
 async def _init_redis_async(_, loop):
     logger.setLevel(logging.DEBUG)
     global redis
-    redis = await aioredis.create_pool(
-        REDIS_SERVER, encoding="utf-8", minsize=20, maxsize=50000
+    url = "redis://{0}:{1}".format(*REDIS_SERVER)
+    redis = aioredis.from_url(
+        url, encoding="utf-8"
     )
-
-
-async def _close_redis_async(_, loop):
-    redis.close()
-    await redis.wait_closed()
 
 
 app.register_listener(_init_redis_async, "before_server_start")
 app.register_listener(_create_locks, "before_server_start")
-app.register_listener(_close_redis_async, "after_server_stop")
