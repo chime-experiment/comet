@@ -23,6 +23,7 @@ import logging
 import redis as redis_sync
 import time
 import traceback
+import os
 
 from async_lru import alru_cache
 from sanic import Sanic
@@ -37,10 +38,11 @@ from . import __version__
 from .manager import Manager, TIMESTAMP_FORMAT
 from .exception import CometError, DatasetNotFoundError, StateNotFoundError
 
-
+PORT = os.environ['PORT']
+HOST = os.environ['HOST']
 REQUESTED_STATE_TIMEOUT = 35
 DEFAULT_PORT = 12050
-REDIS_SERVER = ("localhost", 6379)
+REDIS_SERVER = (HOST, PORT)
 
 # config variable
 wait_time = None
