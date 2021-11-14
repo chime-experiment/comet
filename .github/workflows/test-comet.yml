@@ -26,16 +26,16 @@ jobs:
         - 6379/tcp
     
     steps:
-      - name: Checkout
+      - name: checkout
         uses: actions/checkout@v2
-      - name: Cache-pip
+      - name: cache-pip
         uses: actions/cache@v2
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: | 
             ${{ runner.os }}-pip-
-      -name: Install-apt-packages
+      - name: install-apt-packages
         run: |
           sudo apt-get -y install libevent-dev
           sudo apt-get -y install libboost-test-dev
@@ -46,7 +46,7 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: '3.7'
-      - name: pip-action
+      - name: before-install
         uses: BSFishy/pip-action@v1
         with:
           packages: |
@@ -59,24 +59,25 @@ jobs:
             locust
             future
             aiohttp
+      - name: install
         run: python -m pip install .
         shell: bash
       - name: before-script
-          run: |
-            mysql -e "CREATE DATABASE test;"
-            ccache -s || true
-          shell: bash
+        run: |
+          mysql -e "CREATE DATABASE test;"
+          ccache -s || true
+        shell: bash
       - name: script
-          run: |
-            black --check .
-            find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
-            export PYTHONPATH=.:$PYTHONPATH
-            cd tests
-            pytest -x --cov=comet
-            mkdir skyfield_data
-            CAPUT_SKYFIELD_PATH=skyfield_data ./kotetest.sh
-            ccache -s || true
-          shell: bash
+        run: |
+          black --check .
+          find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
+          export PYTHONPATH=.:$PYTHONPATH
+          cd tests
+          pytest -x --cov=comet
+          mkdir skyfield_data
+          CAPUT_SKYFIELD_PATH=skyfield_data ./kotetest.sh
+          ccache -s || true
+        shell: bash
           
        
        
