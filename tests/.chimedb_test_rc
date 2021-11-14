@@ -1,9 +1,9 @@
 chimedb:
-        db_type:         MySQL
-        db:              test
-        user_ro:         travis
-        passwd_ro:       ""
-        user_rw:         travis
-        passwd_rw:       ""
-        host:            127.0.0.1
-        port:            3306
+  db_type: MySQL
+  db: chime
+  user_ro: chime
+  passwd_ro: chime
+  user_rw: chime
+  passwd_rw: chime
+  host: 127.0.0.1
+  port: 3306
