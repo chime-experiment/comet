@@ -1,0 +1,149 @@
+name: test-comet
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.8, 3.11]
+
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_USER: chime
+          MYSQL_PASSWORD: chime
+          MYSQL_ROOT_PASSWORD: chime
+          MYSQL_DATABASE: chime
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=10s --health-retries=10
+
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install
+        run: |
+          pip install --use-deprecated=legacy-resolver .
+          pip install pytest pytest-asyncio codecov pytest-cov locust aiohttp flask
+
+      - name: script
+        env:
+          REDIS_HOST: 0.0.0.0
+          REDIS_PORT: 6379
+        run: |
+          cd tests
+          pytest -x --cov=comet
+        shell: bash
+
+  # Run the comet related tests included in kotekan
+  test-kotekan:
+    runs-on: ubuntu-latest
+
+    env:
+      USE_CCACHE: 1
+      CCACHE_SLOPPINESS: pch_defines,time_macros
+      CCACHE_COMPRESS: 1
+      CCACHE_MAXSIZE: 250M
+      MAKEFLAGS: "-j 2"
+
+    services:
+
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install-apt-packages
+        run: |
+          sudo apt-get -y install libevent-dev
+          sudo apt-get -y install libboost-test-dev
+          sudo apt-get -y install findutils
+          sudo apt-get -y install gcc
+
+      - name: setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+
+      - name: setup-python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: install comet and test dependencies
+        run: |
+          pip install --use-deprecated=legacy-resolver .
+          pip install pytest pytest-asyncio codecov pytest-cov locust aiohttp
+
+      - name: Checkout Kotekan
+        uses: actions/checkout@v4
+        with:
+          repository: "kotekan/kotekan"
+          path: "kotekan"
+          ref: "2021.11b"
+
+      - name: Build kotekan and tests
+        run: |
+          cd kotekan/build
+          cmake -DWITH_TESTS=ON -DCCACHE=ON ..
+          make dataset_broker_producer dataset_broker_producer2 dataset_broker_consumer
+
+      - name: Run comet tests from kotekan
+        env:
+          REDIS_HOST: 0.0.0.0
+          REDIS_PORT: 6379
+        run: |
+          pip install flask pytest-localserver
+          cd kotekan/tests
+          mkdir skyfield_data
+          export PYTHONPATH=../python:$PYTHONPATH
+          export CAPUT_SKYFIELD_PATH=skyfield_data
+          pytest -x test_dataset_broker.py
+
+  lint-code:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install pip dependencies
+      run: |
+        pip install black pydocstyle
+        pip install -r requirements.txt
+        python setup.py develop
+
+    - name: Check code with black
+      run: |
+        black comet/broker.py
+        black --check .
+        find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
