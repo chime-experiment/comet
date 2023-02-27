@@ -1,9 +1,9 @@
 chimedb:
         db_type:         MySQL
-        db:              test
+        db:              symfony
         user_ro:         travis
-        passwd_ro:       ""
+        passwd_ro:       symfony
         user_rw:         travis
-        passwd_rw:       ""
+        passwd_rw:       symfony
         host:            127.0.0.1
         port:            3306

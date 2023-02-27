@@ -16,6 +16,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
+          MYSQL_USER: travis
+          MYSQL_PASSWORD: symfony
           MYSQL_ROOT_PASSWORD: symfony
           MYSQL_DATABASE: symfony
         ports:

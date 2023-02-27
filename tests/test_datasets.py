@@ -38,14 +38,6 @@ now = datetime.utcnow()
 version = "0.1.1"
 
 
-try:
-    chimedb.core.connect()
-    chimedb.core.close()
-    has_chimedb = True
-except chimedb.core.exceptions.ConnectionError:
-    has_chimedb = False
-
-
 # Todo: deprecated
 @pytest.fixture(scope="session", autouse=True)
 def manager():
@@ -173,7 +165,6 @@ def test_recover(manager, broker, simple_ds):
     assert ds.state_type == "test"
 
 
-@pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver(archiver, simple_ds, manager, broker):
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
@@ -201,7 +192,6 @@ def test_archiver(archiver, simple_ds, manager, broker):
     chimedb.core.close()
 
 
-@pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver_pushback(archiver):
     r = redis.Redis("127.0.0.1", 6379)
     r.ltrim("archive_dataset", 1, 0)
