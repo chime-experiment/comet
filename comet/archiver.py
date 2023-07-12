@@ -88,21 +88,25 @@ class Archiver:
             # single invalid item in the first list, ignoring any items in the second
             # list.
             random.shuffle(TYPES)
-            what, data = self.redis.brpop(TYPES)
+            try:
+                what, data = self.redis.brpop(TYPES)
 
-            if what == "archive_state":
-                self._insert_state(data)
-            elif what == "archive_dataset":
-                self._insert_dataset(data)
-            else:
-                logger.warning(
-                    "Unexpected key returned by BRPOP: {} (expected one of {}).".format(
-                        what, TYPES
+                if what == "archive_state":
+                    self._insert_state(data)
+                elif what == "archive_dataset":
+                    self._insert_dataset(data)
+                else:
+                    logger.warning(
+                        "Unexpected key returned by BRPOP: {} (expected one of {}).".format(
+                            what, TYPES
+                        )
                     )
-                )
+                    self._pushback(what, data)
+                    # slow down. this would turn into a busy wait otherwise...
+                    time.sleep(self.failure_wait_time)
+            except Exception:
                 self._pushback(what, data)
-                # slow down. this would turn into a busy wait otherwise...
-                time.sleep(self.failure_wait_time)
+                raise
 
     def _pushback(self, listname, data):
         """
