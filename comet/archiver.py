@@ -97,15 +97,22 @@ class Archiver:
                     self._insert_dataset(data)
                 else:
                     logger.warning(
-                        "Unexpected key returned by BRPOP: {} (expected one of {}).".format(
-                            what, TYPES
-                        )
+                        f"Unexpected key returned by BRPOP: {what} (expected one of {TYPES})."
                     )
                     self._pushback(what, data)
                     # slow down. this would turn into a busy wait otherwise...
                     time.sleep(self.failure_wait_time)
-            except Exception:
-                self._pushback(what, data)
+            except Exception as e1:
+                logger.error(
+                    f"Uncaught exception {e1}! Trying to pushback before crash."
+                )
+                try:
+                    self._pushback(what, data)
+                except Exception as e2:
+                    logger.error(
+                        f"Pushback failed: {e2}!. Item {data} from {what} will be missing."
+                    )
+                    raise e2 from e1
                 raise
 
     def _pushback(self, listname, data):
