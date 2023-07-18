@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class Archiver:
-    """
-    Main class to run the comet archiver.
+    """Main class to run the comet archiver.
 
     New data that should be archived is expected in a list in redis. The archiver currently
     monitors the lists `registered_dataset` and `registered_state`. If a state or dataset
@@ -59,9 +58,7 @@ class Archiver:
             manager.register_start(startup_time, __version__, config)
         except (CometError, ConnectionError) as exc:
             logger.error(
-                "Comet archiver failed registering its startup and initial config: {}".format(
-                    exc
-                )
+                f"Comet archiver failed registering its startup and initial config: {exc}"
             )
             exit(1)
 
@@ -78,163 +75,151 @@ class Archiver:
 
     def run(self):
         """Run comet archiver (forever)."""
-        logger.info("Started CoMeT Archiver {}.".format(__version__))
+        logger.info(f"Started CoMeT Archiver {__version__}.")
 
         # names of the lists we are monitoring on redis
         TYPES = ["archive_state", "archive_dataset"]
 
         while True:
-            # Shuffle the list of types, otherwise the archiver can get stuck on a
-            # single invalid item in the first list, ignoring any items in the second
-            # list.
-            random.shuffle(TYPES)
+            # Randomly choose a type, otherwise the archiver can get stuck on a
+            # single invalid item in the first list, ignoring any items in other
+            # lists
+            which_list = random.choice(TYPES)
+            # Do not remove from the list until it has been added to the database
+            data = self.redis.lrange(which_list, 0, 0)
+
+            if not data:
+                # Wait for a moment
+                time.sleep(self.failure_wait_time)
+                continue
+
+            if self._exists(data, which_list):
+                # Remove it from the redis list since it already exists
+                # in the database
+                self.redis.lpop(which_list)
+                continue
+
+            # Try to add the next item to the database
             try:
-                what, data = self.redis.brpop(TYPES)
-
-                if what == "archive_state":
-                    self._insert_state(data)
-                elif what == "archive_dataset":
-                    self._insert_dataset(data)
+                id, timestamp = self._load_json(data)
+                if which_list == "archive_state":
+                    result = self._insert_state(id, timestamp)
                 else:
-                    logger.warning(
-                        f"Unexpected key returned by BRPOP: {what} (expected one of {TYPES})."
-                    )
-                    self._pushback(what, data)
-                    # slow down. this would turn into a busy wait otherwise...
-                    time.sleep(self.failure_wait_time)
-            except Exception as e1:
+                    result = self._insert_dataset(id, timestamp)
+            except chimedb.ConnectionError as err:
+                # Wait a bit longer
                 logger.error(
-                    f"Uncaught exception {e1}! Trying to pushback before crash."
+                    "Could not connect to the chime database. The archiver will restart. \n"
                 )
-                try:
-                    self._pushback(what, data)
-                except Exception as e2:
-                    logger.error(
-                        f"Pushback failed: {e2}!. Item {data} from {what} will be missing."
-                    )
-                    raise e2 from e1
-                raise
+                raise err
+            except Exception as err:
+                logger.error(
+                    "An unexpected error occured while adding an item to the database. \n"
+                    f"{err}"
+                )
+                time.sleep(self.failure_wait_time)
+                continue
 
-    def _pushback(self, listname, data):
-        """
-        Push the item back into the list.
+            if not result:
+                # The item wasn't added for some reason. Move it
+                # to the end of the list in case it depends on something
+                # elsewhere in the list
+                self.redis.lmove(which_list, which_list, "LEFT", "RIGHT")
 
-        Slow down so this doesn't become a busy-wait.
-        """
-        llen = self.redis.lpush(listname, data)
-        logger.error(
-            "Pushed data back into the list {} on redis at {}:{}. Current list length is {}. Please have a look. Sleeping for {}s ...".format(
-                listname,
-                self.redis.connection_pool.connection_kwargs["host"],
-                self.redis.connection_pool.connection_kwargs["port"],
-                llen,
-                self.failure_wait_time,
-            )
-        )
-        time.sleep(self.failure_wait_time)
-
-    def _insert_state(self, data):
-        logger.info("Archiving state {}".format(data))
+    @staticmethod
+    def _exists(data, type_):
+        """Check if a dataset or state exists."""
         json_data = json.loads(data)
 
-        # Parse the json data. If anything goes wrong, push the state back into the list. This is someone else's problem now.
         try:
-            state_id = json_data["hash"]
+            id = json_data["hash"]
+        except KeyError as key:
+            logger.error(f"Key {key} not found in data {json_data}")
+            return False
+
+        if type_ == "archive_state":
+            return db.DatasetState.exists(id)
+
+        return db.Dataset.from_id(id) is not None
+
+    @staticmethod
+    def _load_json(data):
+        """Load and parse a json dataset."""
+        json_data = json.loads(data)
+
+        # The "dataset" in redis consists of just a hash and a timestamp
+        try:
+            id = json_data["hash"]
             time = json_data["time"]
         except KeyError as key:
-            logger.error("Key {} not found in state data {}.".format(key, json_data))
-            self._pushback("archive_state", data)
-            return
+            logger.error(f"Key {key} not found in data {json_data}")
+            return None
 
         try:
             timestamp = datetime.datetime.strptime(time, TIMESTAMP_FORMAT)
         except ValueError as err:
+            logger.error(f"Failure parsing timestamp {time}: {err}")
+            return None
+
+        return id, timestamp
+
+    def _insert_state(self, id, timestamp):
+        """Insert a state into the database."""
+
+        item = self.redis.hget("states", id)
+
+        if item is None:
             logger.error(
-                "Failure parsing timestamp {} in state data: {}.".format(time, err)
+                f"Failure archiving state {id}. Item is not known to broker/redis."
             )
-            self._pushback("archive_state", data)
-            return
+            return False
 
-        # Get the state from redis
-        state = self.redis.hget("states", state_id)
-        if state is None:
+        item = json.loads(item)
+        stype = item.get("type")
+        db.insert_state(id, stype, timestamp, item)
+
+        return True
+
+    def _insert_dataset(self, id, timestamp):
+        """Insert a dataset into the database."""
+
+        item = self.redis.hget("datasets", id)
+
+        # This item wasn't in either list
+        if item is None:
             logger.error(
-                "Failure archiving state {}: state is not known to broker/redis.".format(
-                    state_id
-                )
+                f"Failure archiving dataset {id}. Item is not known to broker/redis."
             )
-            self._pushback("archive_state", data)
-            return
-        state = json.loads(state)
+            return False
 
-        state_type = state["type"]
-        db.insert_state(state_id, state_type, timestamp, state)
+        item = json.loads(item)
 
-    def _insert_dataset(self, data):
-        logger.info("Archiving dataset {}".format(data))
-        json_data = json.loads(data)
-
-        # Parse the json data. If anything goes wrong, push the state back into the list. This is someone else's problem now.
-        try:
-            ds_id = json_data["hash"]
-            time = json_data["time"]
-        except KeyError as key:
-            logger.error("Key {} not found in dataset data {}.".format(key, json_data))
-            self._pushback("archive_dataset", data)
-            return
-
-        try:
-            timestamp = datetime.datetime.strptime(time, TIMESTAMP_FORMAT)
-        except ValueError as err:
-            logger.error(
-                "Failure parsing timestamp {} in dataset data: {}.".format(time, err)
-            )
-            self._pushback("archive_dataset", data)
-            return
-
-        # Get the dataset from redis
-        dataset = self.redis.hget("datasets", ds_id)
-        if dataset is None:
-            logger.error(
-                "Failure archiving dataset (dataset is not known to broker/redis): {}".format(
-                    ds_id
-                )
-            )
-            self._pushback("archive_dataset", data)
-            return
-        dataset = json.loads(dataset)
-
-        base_dset = dataset.get("base_dset", None)
-        is_root = dataset.get("is_root", False)
-        state = dataset["state"]
+        base = item.get("base_dset")
+        is_root = item.get("is_root", False)
+        state = item["state"]
 
         try:
-            db.insert_dataset(ds_id, base_dset, is_root, state, timestamp)
+            db.insert_dataset(id, base, is_root, state, timestamp)
         except db.DatasetState.DoesNotExist:
             logger.error(
-                "Failure archiving dataset (DB doesn't know the referenced state): {}".format(
-                    data
-                )
+                f"Failure archiving dataset {item}. "
+                "DB doesn't know the referenced state."
             )
-            self._pushback("archive_dataset", data)
-            return
+            return False
         except db.Dataset.DoesNotExist:
             logger.error(
-                "Failure archiving dataset (DB doesn't know the referenced base dataset): {}".format(
-                    data
-                )
+                f"Failure archiving dataset {item}. "
+                "DB doesn't know the referenced base dataset."
             )
-            self._pushback("archive_dataset", data)
-            return
-        # This is because these peewee exception names sometimes change somehow?
+            return False
         except DoesNotExist as err:
             logger.error(
-                "Failure archiving dataset {} (DB doesn't know something referenced by it): {}".format(
-                    data, err
-                )
+                f"Failure archiving dataset {item}. "
+                f"DB doesn't know something that was referenced: {err}"
             )
-            self._pushback("archive_dataset", data)
-            return
+            return False
+
+        return True
 
     def __del__(self):
         """Stop the archiver."""
