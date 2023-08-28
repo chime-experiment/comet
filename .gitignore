@@ -7,3 +7,4 @@ __pycache__
 comet.egg-info
 dist
 build
+*.python-version
