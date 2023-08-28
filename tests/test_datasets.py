@@ -51,8 +51,8 @@ except chimedb.core.exceptions.ConnectionError:
 def manager():
     manager = Manager("localhost", PORT)
 
-    manager.register_start(now, version)
-    manager.register_config(CONFIG)
+    assert manager.register_start(now, version, CONFIG) is None
+    # manager.register_config(CONFIG)
     return manager
 
 
