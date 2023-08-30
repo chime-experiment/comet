@@ -17,7 +17,7 @@ RUN apt-get update && \
     apt-get install -y curl && \
     apt-get install -y build-essential && \
     apt-get install -y libmariadb-dev && \
-    pip install -r /comet/requirements.txt && \
+    pip install -r --use-legacy=dependency-resolver /comet/requirements.txt && \
     pip install /comet && \
     #-----------------------
     # Minimize container size
