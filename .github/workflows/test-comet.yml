@@ -3,15 +3,14 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     env:
       USE_CCACHE: 1
       CCACHE_SLOPPINESS: pch_defines,time_macros
       CCACHE_COMPRESS: 1
       CCACHE_MAXSIZE: 250M
-      #PATH: "/usr/lib/ccache:$HOME/miniconda/bin:$PATH"
       MAKEFLAGS: "-j 2"
-    
+
     services:
       mysql:
         image: mariadb:10.4
@@ -23,6 +22,7 @@ jobs:
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=10s --health-retries=10
+
       redis:
         image: redis
         ports:
@@ -32,7 +32,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -41,25 +41,25 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: | 
+          restore-keys: |
             ${{ runner.os }}-pip-
+
       - name: install-apt-packages
         run: |
           sudo apt-get -y install libevent-dev
           sudo apt-get -y install libboost-test-dev
           sudo apt-get -y install findutils
           sudo apt-get -y install gcc
-        shell: bash
+
       - name: setup-python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v2
         with:
           python-version: '3.8'
+
       - name: before-install
         uses: BSFishy/pip-action@v1
         with:
           packages: |
-            black
-            pydocstyle
             pytest
             pytest-asyncio
             codecov
@@ -69,30 +69,52 @@ jobs:
             aiohttp
             flask
             pytest-localserver
+
       - name: install
         run: pip install --use-deprecated=legacy-resolver .
-        shell: bash
+
       - name: before-script
         env:
           DB_PORT: ${{ job.services.mysql.ports[3306] }}
           PATH: "/usr/lib/ccache:$HOME/miniconda/bin:$PATH"
         run: ccache -s || true
-        #mysql -e "CREATE DATABASE test;"  
         shell: bash
+
       - name: script
         env:
           REDIS_HOST: 0.0.0.0
           REDIS_PORT: 6379
-        #env:
-        #  PATH: "/usr/lib/ccache:$HOME/miniconda/bin:$PATH"
         run: |
-          black comet/broker.py
-          black --check .
-          find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
-          export PYTHONPATH=.:$PYTHONPATH
           cd tests
           pytest -x --cov=comet
           mkdir skyfield_data
           CAPUT_SKYFIELD_PATH=skyfield_data ./kotetest.sh
           ccache -s || true
         shell: bash
+
+  lint-code:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.11"
+
+    - name: Install apt dependencies
+      run: |
+        sudo apt-get install -y libopenmpi-dev openmpi-bin
+
+    - name: Install pip dependencies
+      run: |
+        pip install black pydocstyle
+        pip install -r requirements.txt
+        python setup.py develop
+
+    - name: Check code with black
+      run: |
+        black comet/broker.py
+        black --check .
+        find . -type d -o ! -name versioneer.py ! -name test_*.py ! -name _version.py -name \*.py -exec pydocstyle --convention=numpy --add-ignore=D105,D202 {} +
