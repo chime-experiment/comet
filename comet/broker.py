@@ -12,7 +12,6 @@ Available endpoints:
 - update-datasets
 - internal-states
 """
-import aioredis
 import asyncio
 import contextvars
 import datetime
@@ -21,6 +20,7 @@ import ujson
 import random
 import logging
 import redis as redis_sync
+import redis.asyncio as aioredis
 import time
 import traceback
 import os
