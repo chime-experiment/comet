@@ -38,16 +38,16 @@ from . import __version__
 from .manager import Manager, TIMESTAMP_FORMAT
 from .exception import CometError, DatasetNotFoundError, StateNotFoundError
 
-REDIS_PORT = os.environ['REDIS_PORT']
-REDIS_HOST = os.environ['REDIS_HOST']
-REQUESTED_STATE_TIMEOUT = 35
 DEFAULT_PORT = 12050
+REDIS_PORT = os.environ.get("REDIS_PORT", 6379)
+REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+REQUESTED_STATE_TIMEOUT = 35
 REDIS_SERVER = (REDIS_HOST, REDIS_PORT)
 
 # config variable
 wait_time = None
 
-app = Sanic(__name__)
+app = Sanic(__name__.replace(".", "-"))
 app.config.REQUEST_TIMEOUT = 120
 app.config.RESPONSE_TIMEOUT = 120
 
@@ -61,8 +61,10 @@ waiting_states = {}
 # used for tracking sequences of events in the logs
 request_id = contextvars.ContextVar("request_id", default=0)
 
-def json_dumps(*args, **kwargs):
+
+def _json_dumps(*args, **kwargs):
     return ujson.dumps(*args, **kwargs, ensure_ascii=False, reject_bytes=False)
+
 
 class RequestFormatter(logging.Formatter):
     """Logging formatter that adds a request_id to the logger's record.
@@ -158,7 +160,7 @@ async def get_states(request):
         reply = {"result": "success", "states": states}
 
         logger.debug("states: {}".format(states))
-        return response.json(reply, dumps=json_dumps)
+        return response.json(reply, dumps=_json_dumps)
     except Exception as e:
         logger.error(
             "states: threw exception {} while handling request from {}",
@@ -187,7 +189,7 @@ async def get_datasets(request):
         reply = {"result": "success", "datasets": datasets}
 
         logger.debug("datasets: {}".format(datasets))
-        return response.json(reply, dumps=json_dumps)
+        return response.json(reply, dumps=_json_dumps)
     except Exception as e:
         logger.error(
             "datasets: threw exception {} while handling request from {}",
@@ -279,7 +281,9 @@ async def register_state(request):
             except StateNotFoundError:
                 # we don't know this state, did we request it already?
                 # After REQUEST_STATE_TIMEOUT we request it again.
-                request_time = await redis.execute_command("hget", "requested_states", hash)
+                request_time = await redis.execute_command(
+                    "hget", "requested_states", hash
+                )
                 if request_time:
                     request_time = float(request_time)
                     if request_time > time.time() - REQUESTED_STATE_TIMEOUT:
@@ -295,7 +299,9 @@ async def register_state(request):
                 reply["request"] = "get_state"
                 reply["hash"] = hash
                 logger.debug("register-state: Asking for state, hash: {}".format(hash))
-                await redis.execute_command("hset", "requested_states", hash, time.time())
+                await redis.execute_command(
+                    "hset", "requested_states", hash, time.time()
+                )
         return response.json(reply)
     except Exception as e:
         logger.error(
@@ -355,7 +361,9 @@ async def send_state(request):
 
         # Remove it from the set of requested states (if it's in there.)
         try:
-            await asyncio.shield(redis.execute_command("hdel", "requested_states", hash))
+            await asyncio.shield(
+                redis.execute_command("hdel", "requested_states", hash)
+            )
         except asyncio.CancelledError as err:
             logger.info(
                 "/send-state {}: Cancelled while removing requested state. Ignoring...".format(
@@ -421,7 +429,9 @@ async def register_dataset(request):
             except DatasetNotFoundError:
                 if dataset_valid and root is not None:
                     # save the dataset
-                    await redis.execute_command("hset", "datasets", hash, json.dumps(ds))
+                    await redis.execute_command(
+                        "hset", "datasets", hash, json.dumps(ds)
+                    )
 
                     reply["result"] = "success"
                     archive_ds = True
@@ -639,7 +649,7 @@ wait_for_state = lambda id: wait_for_x(
 )
 
 
-@alru_cache(maxsize=10000, cache_exceptions=False)
+@alru_cache(maxsize=10000)
 async def get_dataset(ds_id, wait=True):
     """
     Get a dataset by ID from redis (LRU cached).
@@ -675,7 +685,7 @@ async def get_dataset(ds_id, wait=True):
     return json.loads(ds)
 
 
-@alru_cache(maxsize=1000, cache_exceptions=False)
+@alru_cache(maxsize=1000)
 async def get_state(state_id, wait=True):
     """
     Get a state by ID from redis (LRU cached).
@@ -882,9 +892,7 @@ async def _init_redis_async(_, loop):
     logger.setLevel(logging.DEBUG)
     global redis
     url = "redis://{0}:{1}".format(*REDIS_SERVER)
-    redis = aioredis.from_url(
-        url, encoding="utf-8"
-    )
+    redis = aioredis.from_url(url, encoding="utf-8")
 
 
 app.register_listener(_init_redis_async, "before_server_start")

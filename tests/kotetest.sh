@@ -10,6 +10,7 @@ make dataset_broker_producer dataset_broker_producer2 dataset_broker_consumer
 
 more /proc/cpuinfo | grep flags
 
+pip install flask pytest-localserver
 cd ../tests
 export PYTHONPATH=../python:$PYTHONPATH
 pytest -x test_dataset_broker.py
