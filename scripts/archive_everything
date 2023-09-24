@@ -2,10 +2,10 @@
 
 """Tell the comet-archiver to archive everything currently in redis."""
 
-import aioredis
 import asyncio
 import json
 import logging
+import redis.asyncio as aioredis
 
 from comet import broker
 

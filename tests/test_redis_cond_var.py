@@ -1,6 +1,6 @@
 import os
 import asyncio
-import aioredis
+import redis.asyncio as aioredis
 import pytest
 
 from comet.redis_async_locks import Lock, Condition

@@ -1,8 +1,7 @@
-aioredis>=2.0
 async_lru
-redis
+redis>=4.2
 requests
-sanic ; python_version >= '3.8'
+sanic>=22.9; python_version >= '3.8'
 multidict>=4.6.1
 caput @ git+https://github.com/radiocosmology/caput.git
 mmh3

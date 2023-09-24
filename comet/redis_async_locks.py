@@ -1,6 +1,6 @@
 """Condition variable using redis."""
 import asyncio
-import aioredis
+import redis.asyncio as aioredis
 import logging
 
 logger = logging.getLogger(__name__)
