@@ -867,8 +867,11 @@ class Broker:
             server_kwargs["port"] = port
         self.port = port
 
+        # NOTE: sanic *must* run in single_process mode here as the current
+        # implementation of comet will not correctly spawn the worker processes for
+        # sanic >= 22.9 and thus will crash.
         app.run(
-            workers=1,
+            single_process=True,
             debug=False,
             **server_kwargs,
         )
