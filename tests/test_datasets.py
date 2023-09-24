@@ -38,6 +38,14 @@ now = datetime.utcnow()
 version = "0.1.1"
 
 
+try:
+    chimedb.core.connect()
+    chimedb.core.close()
+    has_chimedb = True
+except chimedb.core.exceptions.ConnectionError:
+    has_chimedb = False
+
+
 # Todo: deprecated
 @pytest.fixture(scope="session", autouse=True)
 def manager():
@@ -137,7 +145,6 @@ def test_hash(manager):
 
 
 def test_register_config(manager, broker):
-
     expected_config_dump = CONFIG
     expected_config_dump["type"] = "config_{}".format(__name__)
 
@@ -166,6 +173,7 @@ def test_recover(manager, broker, simple_ds):
     assert ds.state_type == "test"
 
 
+@pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver(archiver, simple_ds, manager, broker):
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
@@ -193,8 +201,11 @@ def test_archiver(archiver, simple_ds, manager, broker):
     chimedb.core.close()
 
 
+@pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver_pushback(archiver):
     r = redis.Redis("127.0.0.1", 6379)
+    r.ltrim("archive_dataset", 1, 0)
+    r.ltrim("archive_state", 1, 0)
     assert r.llen("archive_dataset") == 0
     assert r.llen("archive_state") == 0
 
@@ -368,7 +379,7 @@ def test_lru_cache(broker, manager_low_timeout):
 
     # Request an unknown dataset
     with pytest.raises(BrokerError):
-        manager_low_timeout.get_dataset(ds_id)
+        print(manager_low_timeout.get_dataset(ds_id))
     state = manager_low_timeout.register_state(data={"foo": "bar"}, state_type="test")
     assert state is not None
     assert isinstance(state, State)

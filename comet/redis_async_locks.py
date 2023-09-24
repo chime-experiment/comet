@@ -49,7 +49,7 @@ class Lock:
 
         Parameters
         ----------
-        redis : aioredis.ConnectionsPool
+        redis : aioredis.ConnectionPool
             A connections pool instance that will be used to connect to the redis database.
         name : str
             A name for the lock. This must be unique (i.e. not clash with
@@ -62,13 +62,8 @@ class Lock:
             The created lock.
         """
         self = cls(redis, name)
-
-        await redis.execute(
-            "eval",
-            "redis.call('del', KEYS[1]); redis.call('lpush', KEYS[1], '1')",
-            1,
-            self.lockname,
-        )
+        await redis.delete(self.lockname)
+        await redis.lpush(self.lockname, "1")
 
         return self
 
@@ -81,7 +76,6 @@ class Lock:
         r = await self.acquire(no_block=True)
         if r is None:
             raise LockError("Failure closing lock: Can't acquire lock.")
-        self.redis.release(self._redis_conn)
         self.redis = None
         logger.debug("Closed lock {}".format(self.name))
 
@@ -91,22 +85,21 @@ class Lock:
         # TODO: mangle to avoid name clashes
         return f"lock_{self.name}"
 
+    @property
+    def blockname(self):
+        """Name of lock variable, as byte string."""
+        return bytes(self.lockname, encoding="utf-8")
+
     # TODO: can we do this synchronously?
     async def locked(self):
         """Tells if the lock is already acquired."""
-        return int(await self.redis.execute("llen", self.lockname)) == 0
+        return int(await self.redis.execute_command("llen", self.lockname)) == 0
 
-    async def acquire(self, r=None, no_block=False):
+    async def acquire(self, no_block=False):
         """Acquire the lock.
 
         Parameters
         ----------
-        r : aioredis.Connection, optional
-            A pre-existing connection to the redis database. If not set, one
-            will be claimed from the pool (default). This can be used to
-            re-use connections. Warning, if this happens you almost certainly
-            want to use `.release(close=False)` to ensure this isn't closed by
-            the lock when it is released.
         no_block : bool
             Turn on try_lock mode: Instead of blocking, just return `None` in case the
             lock can't directly be acquired.
@@ -121,31 +114,22 @@ class Lock:
         """
         # Acquire a connection to perform the blocking operation on the database
         logger.debug(f"Acquiring lock {self.name}.")
-        if r is None:
-            if self.redis is None:
-                raise LockError(
-                    f"Failure acquiring lock: {self.name} (No redis connection pool)"
-                )
-            r = await self.redis.acquire()
+        if self.redis is None:
+            raise LockError(
+                f"Failure acquiring lock: {self.name} (No redis connection available)"
+            )
         if no_block:
-            if await r.execute("lpop", self.lockname) != "1":
+            if await self.redis.lpop(self.lockname) != b"1":
                 return None
         else:
-            if (await r.execute("blpop", self.lockname, 0)) != [self.lockname, "1"]:
+            if (await self.redis.blpop(self.lockname, 0)) != (self.blockname, b"1"):
                 raise LockError(
                     f"Failure acquiring lock: {self.name} (unexpected value in redis lock)"
                 )
 
         # Check there is no active connection (there shouldn't be, this is just a consistency check)
-        if self._redis_conn is not None:
-            raise LockError(
-                f"Failure acquiring lock: {self.name} (connection not cleared)"
-            )
-
-        # Now we hold the lock, we can set the internal connection copy
-        self._redis_conn = r
         logger.debug(f"Acquired lock {self.name}.")
-        return r
+        return self.redis
 
     async def release(self, close=True):
         """Release the lock.
@@ -160,27 +144,11 @@ class Lock:
         """
         logger.debug(f"Releasing lock {self.name}")
 
-        # Check we have an active connection
-        if (
-            not isinstance(self._redis_conn, aioredis.connection.RedisConnection)
-            or self._redis_conn.closed
-        ):
-            raise LockError(
-                f"Failure releasing lock: {self.name} (no active redis connection)."
-            )
-
-        # Change the internal connection *before* releasing the lock in redis,
-        # but keep a reference so that we can still use it in here
-        r = self._redis_conn
-        self._redis_conn = None
-
         # Release the lock in redis
-        if (await r.execute("lpush", self.lockname, 1)) != 1:
+        if (await self.redis.lpush(self.lockname, 1)) != 1:
             raise LockError(f"Failure releasing lock: {self.name} (released twice?)")
 
         # Close our copy of the connection
-        if close:
-            self.redis.release(r)
         logger.debug(f"Released lock {self.name}.")
 
     async def __aenter__(self):
@@ -255,8 +223,8 @@ class Condition:
             The created condition variable.
         """
         self = cls(lock, name)
-        await self.redis.execute("hset", "WAITING", self.condname, 0)
-        await self.redis.execute("del", self.condname)
+        await self.redis.execute_command("hset", "WAITING", self.condname, 0)
+        await self.redis.execute_command("del", self.condname)
         return self
 
     async def close(self):
@@ -270,8 +238,8 @@ class Condition:
         r = await self.lock.acquire(no_block=True)
         if r is None:
             raise LockError("Failed closing condition variable: Can't acquire lock.")
-        await r.execute("del", "WAITING")
-        await r.execute("del", self.condname)
+        await r.execute_command("del", "WAITING")
+        await r.execute_command("del", self.condname)
         await self.lock.release()
         logger.debug("Closed condition variable {}".format(self.name))
 
@@ -325,7 +293,7 @@ redis.call('HSET', 'WAITING', KEYS[1], 0)
 
         # Use the internal redis connection
         task = asyncio.ensure_future(
-            self.lock._redis_conn.execute("eval", redis_notify_cond, 1, self.condname)
+            self.lock.redis.execute_command("eval", redis_notify_cond, 1, self.condname)
         )
         # If the request gets cancelled while doing this, we have to make sure to await
         # the shielded task, because directly after, the context manager will release
@@ -372,10 +340,6 @@ redis.call('HSET', 'WAITING', KEYS[1], 0)
                 "Parameter timeout is of type {} (expected int).".format(type(timeout))
             )
 
-        # Save a reference to the connection so that we can preserve it through the
-        # release/acquire cycle
-        r = self.lock._redis_conn
-
         if timeout < 0:
             raise TimeoutError
 
@@ -392,7 +356,7 @@ redis.call('HSET', 'WAITING', KEYS[1], 0)
         #
         # waiting = dict()
         # waiting[name] += 1
-        task = asyncio.ensure_future(r.execute("hincrby", "WAITING", self.condname, 1))
+        task = asyncio.ensure_future(self.redis.hincrby("WAITING", self.condname, 1))
         try:
             # Shield against cancellation
             asyncio.shield(task)
@@ -426,7 +390,7 @@ redis.call('HSET', 'WAITING', KEYS[1], 0)
         if not cancelled:
             try:
                 # allow this to be cancelled, but catch to reacquire lock etc
-                ret = await r.execute("blpop", self.condname, timeout)
+                ret = await self.redis.blpop(self.condname, timeout)
             except asyncio.CancelledError as err:
                 # In case of cancellation, continue but remember cancellation
                 cancelled = err
@@ -436,7 +400,7 @@ redis.call('HSET', 'WAITING', KEYS[1], 0)
 
         if have_lock:
             # reacquire the lock
-            task = asyncio.ensure_future(self.lock.acquire(r))
+            task = asyncio.ensure_future(self.lock.acquire())
             try:
                 # shield against cancellation
                 await asyncio.shield(task)
