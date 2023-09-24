@@ -26,6 +26,7 @@ setup(
     author_email="rick@phas.ubc.ca",
     packages=find_packages(),
     install_requires=requirements,
+    python_requires=">= 3.8",
     include_package_data=True,
     scripts=["scripts/comet", "scripts/comet_archiver"],
 )
