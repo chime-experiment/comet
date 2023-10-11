@@ -8,3 +8,6 @@ comet.egg-info
 dist
 build
 *.python-version
+
+# misc
+.DS_Store
