@@ -70,7 +70,13 @@ class Archiver:
 
         # Open connection to redis
         self.redis = redis.Redis(
-            redis_host, redis_port, encoding="utf-8", decode_responses=True
+            redis_host,
+            redis_port,
+            encoding="utf-8",
+            decode_responses=True,
+            max_connections=1,
+            health_check_interval=10,
+            retry_on_timeout=True,
         )
 
     def run(self):
@@ -86,17 +92,24 @@ class Archiver:
             # lists
             which_list = random.choice(TYPES)
             # Do not remove from the list until it has been added to the database
-            data = self.redis.lrange(which_list, 0, 0)
+            # Use the right-most item in list since comet uses `lpush`
+            data = self.redis.lindex(which_list, -1)
 
             if not data:
                 # Wait for a moment
                 time.sleep(self.failure_wait_time)
                 continue
 
+            if isinstance(data, list):
+                data = data[0]
+
+            logger.info(f"Got item {data} from {which_list}.")
+
             if self._exists(data, which_list):
                 # Remove it from the redis list since it already exists
                 # in the database
-                self.redis.lpop(which_list)
+                self.redis.rpop(which_list)
+                logger.info(f"Item {data} from `{which_list}` is archived.")
                 continue
 
             # Try to add the next item to the database
@@ -124,7 +137,7 @@ class Archiver:
                 # The item wasn't added for some reason. Move it
                 # to the end of the list in case it depends on something
                 # elsewhere in the list
-                self.redis.lmove(which_list, which_list, "LEFT", "RIGHT")
+                self.redis.rpoplpush(which_list, which_list)
 
     @staticmethod
     def _exists(data, type_):
@@ -200,22 +213,25 @@ class Archiver:
 
         try:
             db.insert_dataset(id, base, is_root, state, timestamp)
-        except db.DatasetState.DoesNotExist:
+        except (db.get.DatasetState.DoesNotExist, db.orm.DatasetState.DoesNotExist):
             logger.error(
-                f"Failure archiving dataset {item}. "
-                "DB doesn't know the referenced state."
+                f"Failure archiving dataset {id}. "
+                "DB doesn't know the referenced state yet - it might still be in the archive queue.\n"
+                f"Item: {item}"
             )
             return False
-        except db.Dataset.DoesNotExist:
+        except (db.get.Dataset.DoesNotExist, db.orm.Dataset.DoesNotExist):
             logger.error(
-                f"Failure archiving dataset {item}. "
-                "DB doesn't know the referenced base dataset."
+                f"Failure archiving dataset {id}. "
+                "DB doesn't know the referenced base dataset yet - it might still be in the archive queue.\n"
+                f"Item: {item}"
             )
             return False
         except DoesNotExist as err:
             logger.error(
-                f"Failure archiving dataset {item}. "
-                f"DB doesn't know something that was referenced: {err}"
+                f"Failure archiving dataset {id}. "
+                f"DB doesn't know something that was referenced: {err}\n"
+                f"Item: {item}"
             )
             return False
 
