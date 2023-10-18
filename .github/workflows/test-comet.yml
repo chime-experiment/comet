@@ -2,11 +2,13 @@ name: test-comet
 on: [push]
 jobs:
   test:
-    runs-on: ubuntu-latest
 
     strategy:
       matrix:
         python-version: [3.8, 3.11]
+        redis-version: [5.0, "latest"]
+
+    runs-on: ubuntu-latest
 
     services:
       mysql:
@@ -21,7 +23,7 @@ jobs:
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=10s --health-retries=10
 
       redis:
-        image: redis
+        image: redis:${{ matrix.redis-version }}
         ports:
           - 6379:6379
         options: >-
@@ -55,6 +57,11 @@ jobs:
 
   # Run the comet related tests included in kotekan
   test-kotekan:
+    strategy:
+      matrix:
+        python-version: [3.8, 3.11]
+        redis-version: [5.0, "latest"]
+
     runs-on: ubuntu-latest
 
     env:
@@ -67,7 +74,7 @@ jobs:
     services:
 
       redis:
-        image: redis
+        image: redis:${{ matrix.redis-version }}
         ports:
           - 6379:6379
         options: >-
@@ -90,10 +97,10 @@ jobs:
       - name: setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
 
-      - name: setup-python
+      - name: setup-python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: install comet and test dependencies
         run: |
@@ -110,7 +117,7 @@ jobs:
       - name: Build kotekan and tests
         run: |
           cd kotekan/build
-          cmake -DWITH_TESTS=ON -DCCACHE=ON ..
+          cmake -DWITH_TESTS=ON -DARCH=haswell -DCCACHE=ON ..
           make dataset_broker_producer dataset_broker_producer2 dataset_broker_consumer
 
       - name: Run comet tests from kotekan
