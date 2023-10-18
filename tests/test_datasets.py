@@ -203,6 +203,7 @@ def test_archiver(archiver, simple_ds, manager, broker):
 
 @pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver_run(archiver):
+    """Test"""
     r = redis.Redis("127.0.0.1", 6379)
     r.ltrim("archive_dataset", 1, 0)
     r.ltrim("archive_state", 1, 0)
@@ -217,7 +218,7 @@ def test_archiver_run(archiver):
     # Open the database connection
     chimedb.core.connect()
 
-    # Make a couple of mock states and datasets
+    # Make some mock states and datasets
     states_ = [
         {"hash": "test_state", "time": "1999-01-01-10:10:42.001"},
         {"hash": "test_state2", "time": "2022-12-24-03:12:56.003"},
@@ -235,14 +236,13 @@ def test_archiver_run(archiver):
     # Add the first test state to the redis archive_state list
     r.lpush("archive_state", json.dumps(states_[0]))
     time.sleep(0.1)
-    llen = r.llen("archive_state")
-    assert llen == 1
+    assert r.llen("archive_state") == 1
     # Add both test datasets to its list
     for d in datasets_:
         r.lpush("archive_dataset", json.dumps(d))
         time.sleep(0.1)
-    llen = r.llen("archive_dataset")
-    assert llen == 2
+
+    assert r.llen("archive_dataset") == 2
 
     # Next, we'll add the first dataset to the broker. Since the associated
     # state is not known to the broker, the dataset should not be removed
@@ -253,10 +253,8 @@ def test_archiver_run(archiver):
         json.dumps({"is_root": True, "state": "test_state"}),
     )
     time.sleep(0.1)
-    llen = r.llen("archive_dataset")
-    assert llen == 2
-    llen = r.llen("archive_state")
-    assert llen == 1
+    assert r.llen("archive_dataset") == 2
+    assert r.llen("archive_state") == 1
 
     # Now, tell the broker about that state. Both the state and the first dataset
     # should be cleared from the `archive` redis lists
@@ -266,10 +264,8 @@ def test_archiver_run(archiver):
         json.dumps({"state": "test_state", "type": "bs_state"}),
     )
     time.sleep(0.5)
-    llen = r.llen("archive_dataset")
-    assert llen == 1
-    llen = r.llen("archive_state")
-    assert llen == 0
+    assert r.llen("archive_dataset") == 1
+    assert r.llen("archive_state") == 0
 
     # Now lets try that in reverse - we'll tell the broker about the state
     # before adding it to the redis list. The list lengths shouldn't change
@@ -279,10 +275,8 @@ def test_archiver_run(archiver):
         json.dumps({"state": "test_state2", "type": "bs_state"}),
     )
     time.sleep(0.1)
-    llen = r.llen("archive_dataset")
-    assert llen == 1
-    llen = r.llen("archive_state")
-    assert llen == 0
+    assert r.llen("archive_dataset") == 1
+    assert r.llen("archive_state") == 0
 
     # Finally, we'll tell the archiver about the second state and dataset. This should clear
     # out both the state and the dataset
@@ -293,10 +287,8 @@ def test_archiver_run(archiver):
         json.dumps({"is_root": True, "state": "test_state2"}),
     )
     time.sleep(0.5)
-    llen = r.llen("archive_dataset")
-    assert llen == 0
-    llen = r.llen("archive_state")
-    assert llen == 0
+    assert r.llen("archive_dataset") == 0
+    assert r.llen("archive_state") == 0
 
     # Test what happens when we lose connection to the database
     r.lpush("archive_state", json.dumps(states_[2]))
@@ -317,20 +309,46 @@ def test_archiver_run(archiver):
     time.sleep(1)
     assert r.llen("archive_states") == 0
 
+    # We also want to make sure that dataset dependencies are handled correctly.
+    # When a dataset is added to the `archive_dataset`, it will only be added to
+    # the database if it is a root dataset or if its base dataset already exists.
+    base_dset = {"hash": "root", "time": "2004-04-05-11:13:54.023"}
+    non_base_dset = {"hash": "has-dependency", "time": "2004-04-05-11:13:58.023"}
+    # Update the datasets_ list so we can easily remove these later
+    datasets_.extend([base_dset, non_base_dset])
+    # Add the dependent dataset to the broker first. It shouldn't get archived yet
+    r.hset(
+        "datasets",
+        non_base_dset["hash"],
+        json.dumps(
+            {"is_root": False, "base_dset": base_dset["hash"], "state": "test_state"}
+        ),
+    )
+    time.sleep(0.1)
+    assert r.llen("archive_dataset") == 1
+    # Once the base dataset is added, both should be archived
+    r.hset(
+        "datasets",
+        base_dset["hash"],
+        json.dumps({"is_root": True, "state": "test_state"}),
+    )
+    time.sleep(0.5)
+    assert r.llen("archive_dataset") == 0
+
     # Finally, let's make sure these states/datasets actually made it
     # into the chime database
-    dbds_ = (
+    assert (
         chimedb.dataset.Dataset.get()
         .where(chimedb.dataset.Dataset.id << [d["hash"] for d in datasets_])
-        .execute()
+        .count()
+        == 4
     )
-    assert len(dbds_) == 2
-    dbstates_ = (
+    assert (
         chimedb.dataset.DatasetState.get()
         .where(chimedb.dataset.DatasetState.id << [d["hash"] for d in states_])
-        .execute()
+        .count()
+        == 3
     )
-    assert len(dbstates_) == 3
 
     # Remove from redis and DB to make this test behave the same if run twice
     chimedb.dataset.Dataset.delete().where(
