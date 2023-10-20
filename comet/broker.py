@@ -32,8 +32,6 @@ from sanic.log import logger
 from socket import socket
 from threading import Thread
 
-from caput import time as caput_time
-
 from . import __version__
 from .manager import Manager, TIMESTAMP_FORMAT
 from .exception import CometError, DatasetNotFoundError, StateNotFoundError
@@ -330,7 +328,7 @@ async def send_state(request):
             type = None
         logger.info("/send-state {} {}".format(type, hash))
         reply = dict()
-        archive_state = False
+        archive_state = True
 
         # In case the shielded part of this endpoint gets cancelled, we ignore it but
         # re-raise the CancelledError in the end
@@ -343,13 +341,13 @@ async def send_state(request):
             except StateNotFoundError:
                 await redis.execute_command("hset", "states", hash, json.dumps(state))
                 reply["result"] = "success"
-                archive_state = True
 
                 # Notify anything waiting for this state to arrive
                 signal_created(hash, "state", lock_states, waiting_states)
             else:
                 # if we know it already, does it differ?
                 if found != state:
+                    archive_state = False
                     reply["result"] = (
                         "error: hash collision ({})\nTrying to register the following "
                         "dataset state:\n{},\nbut a different state is know to "
@@ -416,7 +414,7 @@ async def register_dataset(request):
             )
             return response.json(reply)
 
-        archive_ds = False
+        archive_ds = True
 
         # In case the shielded part of this endpoint gets cancelled, we ignore it but
         # re-raise the CancelledError in the end
@@ -434,13 +432,13 @@ async def register_dataset(request):
                     )
 
                     reply["result"] = "success"
-                    archive_ds = True
 
                     # Notify anything waiting for this dataset to arrive
                     signal_created(hash, "dataset", lock_datasets, waiting_datasets)
             else:
                 # if we know it already, does it differ?
                 if found != ds:
+                    archive_ds = False
                     reply["result"] = (
                         "error: hash collision ({})\nTrying to register the following dataset:\n{},\nbut a different one is know to "
                         "the broker with the same hash:\n{}".format(hash, ds, found)
@@ -822,7 +820,6 @@ class Broker:
                 exit(1)
 
     def _wait_and_register(self):
-
         # Wait until the port has been set (meaning comet is available)
         while not self.port:
             time.sleep(1)
