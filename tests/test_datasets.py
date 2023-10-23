@@ -173,6 +173,24 @@ def test_recover(manager, broker, simple_ds):
     assert ds.state_type == "test"
 
 
+def test_redis_connection(manager_low_timeout, broker_low_timeout, simple_ds):
+    """Test redis recovery from stale connections (clients)."""
+    # Register a state
+    root = simple_ds[0]
+    state = manager_low_timeout.register_state({"f00": "b4r"}, "t3st")
+    # Cycle through the entire connection pool to initially create
+    # all connections
+    for i in range(21):
+        manager_low_timeout.register_dataset(state.id, root, f"test_{i}", False)
+    # Wait longer than the default broker `health_check_interval` and longer
+    # than the redis server timeout, which is set to 40 seconds in these tests
+    time.sleep(45)
+    # Hit the redis client with a bunch of requests to make sure all the
+    # stale connections are handled properly
+    for i in range(300):
+        manager_low_timeout.register_dataset(state.id, root, f"test2_{i}", False)
+
+
 @pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver(archiver, simple_ds, manager, broker):
     dset_id = simple_ds[0]
@@ -203,7 +221,7 @@ def test_archiver(archiver, simple_ds, manager, broker):
 
 @pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver_run(archiver):
-    """Test"""
+    """Test a run of the archiver to make sure it works."""
     r = redis.Redis("127.0.0.1", 6379)
     r.ltrim("archive_dataset", 1, 0)
     r.ltrim("archive_state", 1, 0)
