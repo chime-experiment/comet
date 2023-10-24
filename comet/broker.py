@@ -892,7 +892,14 @@ async def _init_redis_async(_, loop):
     logger.setLevel(logging.DEBUG)
     global redis
     url = "redis://{0}:{1}".format(*REDIS_SERVER)
-    redis = aioredis.from_url(url, encoding="utf-8")
+    redis = aioredis.from_url(
+        url,
+        encoding="utf-8",
+        max_connections=20,
+        health_check_interval=30,
+        retry_on_timeout=True,
+        socket_keepalive=True,
+    )
 
 
 app.register_listener(_init_redis_async, "before_server_start")
