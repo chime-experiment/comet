@@ -46,6 +46,18 @@ jobs:
           pip install --use-deprecated=legacy-resolver .
           pip install pytest pytest-asyncio codecov pytest-cov locust aiohttp flask
 
+      - name: Install redis tools to use redis-cli command
+        run: sudo apt-get install -y redis-tools
+      
+      - name: Set the redis client timeout to 40 seconds
+        run: redis-cli -p 6379 config set timeout 40
+
+      - name: Verify that redis is running
+        run: redis-cli -p 6379 ping
+
+      - name: Verify that the config has been set
+        run: redis-cli -p 6379 config get timeout
+
       - name: script
         env:
           REDIS_HOST: 0.0.0.0
