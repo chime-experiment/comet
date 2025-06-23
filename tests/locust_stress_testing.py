@@ -19,7 +19,8 @@ from locust import TaskSet, task
 from DummyClient import DummyClientLocust
 
 
-CHIMEDBRC = os.path.join(os.getcwd(), ".chimedb_test_rc")
+_file_directory = os.path.dirname(os.path.realpath(__file__))
+CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
 PORT = "8000"
 HOST = "localhost"
 version = "0.1.1"
