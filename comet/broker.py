@@ -246,7 +246,9 @@ async def archive(data_type, json_data):
             )
         )
     if "time" not in json_data:
-        json_data["time"] = datetime.datetime.utcnow().strftime(TIMESTAMP_FORMAT)
+        json_data["time"] = datetime.datetime.now(datetime.timezone.utc).strftime(
+            TIMESTAMP_FORMAT
+        )
     else:
         if not isinstance(json_data["time"], str):
             raise CometError(
@@ -792,7 +794,7 @@ class Broker:
         self.config = {"debug": debug, "port": port}
 
         self.debug = debug
-        self.startup_time = datetime.datetime.utcnow()
+        self.startup_time = datetime.datetime.now(datetime.timezone.utc)
         self.port = None
         global wait_time
         wait_time = timeout
