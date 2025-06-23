@@ -6,7 +6,7 @@ import redis
 import requests
 import signal
 
-from datetime import datetime
+from datetime import datetime, timezone
 from subprocess import Popen
 
 from comet import Manager, BrokerError, State, Dataset
@@ -34,7 +34,7 @@ G = {"b": 1}
 H = {"blubb": "bla"}
 J = {"meta": "data"}
 
-now = datetime.utcnow()
+now = datetime.now(timezone.utc)
 version = "0.1.1"
 
 
@@ -481,7 +481,11 @@ def test_register_start_dataset_automated(manager_and_dataset, broker):
     # test state data
     assert config_state.data == CONFIG
     assert start_state.data["version"] == version
-    assert datetime.strptime(start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f") == now
+    # NOTE: the timestamp format used here is not timezone aware, so this test
+    # will fail without removing the timezone from `now`. This probably isn't ideal.
+    assert datetime.strptime(
+        start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f"
+    ) == now.replace(tzinfo=None)
 
 
 def test_lru_cache(broker, manager_low_timeout):

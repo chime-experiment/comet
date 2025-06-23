@@ -10,15 +10,10 @@ Code for the locust client is located in tests/DummyClient.py.
 import datetime
 import time
 import os
-import json
-import shutil
 import signal
-import string
-import tempfile
 import random
 from subprocess import Popen
 
-import pytest
 from locust import TaskSet, task
 
 from DummyClient import DummyClientLocust
@@ -34,7 +29,7 @@ def make_small_state():
     """Build a small state for sample_data."""
     return {
         "state": {
-            "time": str(datetime.datetime.utcnow()),
+            "time": str(datetime.datetime.now(datetime.timezone.utc)),
             "type": "start_comet.broker",
         },
         "hash": random.getrandbits(40),

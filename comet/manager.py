@@ -159,7 +159,7 @@ class Manager:
 
             self.states[state_id] = config_state
             self.config_state = config_state
-            self.state_reg_time[state_id] = datetime.datetime.utcnow()
+            self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
 
         # get name of callers module
         name = inspect.getmodule(inspect.stack()[1][0]).__name__
@@ -191,7 +191,7 @@ class Manager:
 
         self.states[state_id] = start_state
         self.start_state = start_state
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
+        self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
 
         if register_datasets:
             if config:
@@ -279,7 +279,7 @@ class Manager:
 
         self.states[state_id] = state
         self.config_state = state
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
+        self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
 
         return
 
@@ -347,7 +347,7 @@ class Manager:
             self._send_state(state, dump)
 
         self.states[state_id] = state
-        self.state_reg_time[state_id] = datetime.datetime.utcnow()
+        self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
 
         return state
 

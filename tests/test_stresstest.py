@@ -6,7 +6,7 @@ import pytest
 from random import shuffle
 import signal
 
-from datetime import datetime
+from datetime import datetime, timezone
 from subprocess import Popen
 
 from comet import Manager
@@ -29,7 +29,7 @@ G = {"b": 1}
 H = {"blubb": "bla"}
 J = {"meta": "data"}
 
-now = datetime.utcnow()
+now = datetime.now(timezone.utc)
 version = "0.7.1"
 
 

@@ -43,7 +43,7 @@ class Archiver:
         # convert ms to s
         self.failure_wait_time = failure_wait_time / 1000
 
-        startup_time = datetime.datetime.utcnow()
+        startup_time = datetime.datetime.now(datetime.timezone.utc)
         config = {
             "broker_host": broker_host,
             "broker_port": broker_port,
