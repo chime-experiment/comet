@@ -11,7 +11,8 @@ from subprocess import Popen
 
 from comet import Manager
 
-CHIMEDBRC = os.path.join(os.getcwd() + "/.chimedb_test_rc")
+_file_directory = os.path.dirname(os.path.realpath(__file__))
+CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
 PORT = "8000"
 PORT_LOW_TIMEOUT = "8080"
