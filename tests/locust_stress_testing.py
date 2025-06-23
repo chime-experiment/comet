@@ -6,6 +6,7 @@ https://docs.locust.io/en/latest/installation.html
 To run tests, run `locust -f tests/locust_stress_testing.py` on the commandline.
 Code for the locust client is located in tests/DummyClient.py.
 """
+
 import datetime
 import time
 import os

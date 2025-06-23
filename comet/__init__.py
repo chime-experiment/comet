@@ -1,10 +1,36 @@
-"""CoMeT: A Config and Metadata Tracker."""
-from ._version import get_versions
+"""comet.
 
-__version__ = get_versions()["version"]
-del get_versions
+A config and metadata tracker.
 
-from .dataset import Dataset
-from .exception import ManagerError, BrokerError, CometError
-from .manager import Manager
-from .state import State
+Submodules
+----------
+.. autosummary::
+    :toctree: _autosummary
+
+    archiver
+    broker
+    dataset
+    exception
+    hash
+    manager
+    state
+"""
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("comet")
+except PackageNotFoundError:
+    # package is not installed
+    pass
+
+del version, PackageNotFoundError
+
+from .dataset import Dataset as Dataset
+from .exception import (
+    ManagerError as ManagerError,
+    BrokerError as BrokerError,
+    CometError as CometError,
+)
+from .manager import Manager as Manager
+from .state import State as State
