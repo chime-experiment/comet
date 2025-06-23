@@ -149,7 +149,7 @@ class DummyManager(DummyClientLocust):
 
         # TravisCI has 2 cores available
         # change the -w flag to (# of cores available - 1)
-        self.broker = Popen(["comet", "--debug", "0", "-t", "2", "-p", PORT])
+        self.broker = Popen(["comet", "broker", "-t", "2", "--port", PORT])
         time.sleep(5)
 
     def teardown(self):

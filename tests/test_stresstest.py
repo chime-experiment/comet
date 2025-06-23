@@ -51,7 +51,7 @@ def broker():
     # Make sure we don't write to the actual chime database
     os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
-    broker = Popen(["comet", "--debug", "1", "-p", PORT])
+    broker = Popen(["comet", "broker", "--debug", "--port", PORT])
 
     # wait for broker start
     time.sleep(3)

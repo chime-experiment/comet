@@ -23,6 +23,7 @@ dependencies = [
     "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
     "chimedb.dataset @ git+https://github.com/chime-experiment/chimedb_dataset.git",
     "async-lru",
+    "click",
     "mmh3",
     "orjson",
     "peewee",
@@ -38,6 +39,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 [project.optional-dependencies]
@@ -47,8 +49,7 @@ test = ["pytest", "pytest-asyncio", "codecov", "pytest-cov", "locust", "aiohttp"
 Repository = "https://github.com/chime-experiment/comet"
 
 [project.scripts]
-comet = "scripts.comet"
-comet-archiver = "scripts.comet_archiver"
+comet = "comet.cli:cli"
 
 [tool.setuptools.dynamic]
 readme = { file = ["README.md"], content-type = "text/markdown" }

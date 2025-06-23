@@ -91,7 +91,17 @@ def broker_low_timeout():
     # Make sure we don't write to the actual chime database
     os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
-    broker = Popen(["comet", "--debug", "1", "-p", PORT_LOW_TIMEOUT, "--timeout", "1"])
+    broker = Popen(
+        [
+            "comet",
+            "broker",
+            "--debug",
+            "--port",
+            PORT_LOW_TIMEOUT,
+            "--timeout",
+            "1",
+        ]
+    )
 
     # wait for broker start
     time.sleep(3)
@@ -108,7 +118,7 @@ def broker():
     # Make sure we don't write to the actual chime database
     os.environ["CHIMEDB_TEST_ENABLE"] = "Yes, please."
 
-    broker = Popen(["comet", "--debug", "1", "-p", PORT])
+    broker = Popen(["comet", "broker", "--debug", "--port", PORT])
 
     # wait for broker start
     time.sleep(3)
@@ -119,7 +129,16 @@ def broker():
 @pytest.fixture(scope="session", autouse=True)
 def archiver(broker):
     archiver = Popen(
-        ["comet_archiver", "-t", "10", "--broker_port", PORT, "--log_level", "DEBUG"]
+        [
+            "comet",
+            "archiver",
+            "-t",
+            "10",
+            "--broker_port",
+            PORT,
+            "--log_level",
+            "DEBUG",
+        ]
     )
     yield dir
     pid = archiver.pid
