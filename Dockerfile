@@ -1,5 +1,5 @@
 # Use an official Python runtime as a base image
-FROM python:3.7-slim
+FROM python:3.11-slim
 
 ## The maintainer name and email
 LABEL maintainer="CHIME/FRB Collaboration"
@@ -17,7 +17,6 @@ RUN apt-get update && \
     apt-get install -y curl && \
     apt-get install -y build-essential && \
     apt-get install -y libmariadb-dev && \
-    pip install -r --use-legacy=dependency-resolver /comet/requirements.txt && \
     pip install /comet && \
     #-----------------------
     # Minimize container size
@@ -28,4 +27,4 @@ RUN apt-get update && \
     rm -rf /tmp/build 
 
 # Run comet when the container launches
-CMD comet --debug 1 --recover 0
+CMD comet broker --debug
