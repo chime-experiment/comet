@@ -1,10 +1,11 @@
 """CLI interface to run comet."""
 
-import click
 import logging
 
-from .broker import Broker
+import click
+
 from .archiver import Archiver
+from .broker import Broker
 
 # LOG_FORMAT = "[%(asctime)s] %(name)s: %(message)s"
 logging.basicConfig(format="[%(asctime)s] %(name)s: %(message)s")
@@ -107,6 +108,7 @@ def broker(port, file_lock_time, timeout, debug, recover):
 def archiver(
     failure_wait_time, broker_host, broker_port, redis_host, redis_port, log_level
 ):
+    """Run the comet archiver."""
     archiver = Archiver(
         broker_host, broker_port, redis_host, redis_port, log_level, failure_wait_time
     )

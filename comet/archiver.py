@@ -1,21 +1,20 @@
-"""
-Archiver for CoMeT.
+"""Archiver for CoMeT.
 
 Move comet broker data from redis to a mysql database
 """
 
 import datetime
 import logging
-from peewee import DoesNotExist
-import orjson as json
 import random
-import redis
 import time
 
 import chimedb.core as chimedb
 import chimedb.dataset as db
+import orjson as json
+import redis
+from peewee import DoesNotExist
 
-from . import Manager, CometError, __version__
+from . import CometError, Manager, __version__
 from .manager import TIMESTAMP_FORMAT
 
 logger = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ class Archiver:
                     "Could not connect to the chime database. The archiver will restart. \n"
                 )
                 raise err
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001
                 logger.error(
                     "An unexpected error occured while adding an item to the database. \n"
                     f"{err}"
@@ -178,7 +177,6 @@ class Archiver:
 
     def _insert_state(self, id, timestamp):
         """Insert a state into the database."""
-
         item = self.redis.hget("states", id)
 
         if item is None:
@@ -195,7 +193,6 @@ class Archiver:
 
     def _insert_dataset(self, id, timestamp):
         """Insert a dataset into the database."""
-
         item = self.redis.hget("datasets", id)
 
         # This item wasn't in either list

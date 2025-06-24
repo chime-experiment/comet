@@ -4,8 +4,7 @@ from .hash import hash_dictionary
 
 
 class Dataset:
-    """
-    A dataset, linking a dataset ID to a state and a base dataset.
+    """A dataset, linking a dataset ID to a state and a base dataset.
 
     Parameters
     ----------
@@ -39,8 +38,7 @@ class Dataset:
 
     @classmethod
     def from_dict(cls, dict_, dataset_id=None):
-        """
-        Create a `Dataset` object from a dictionary.
+        """Create a `Dataset` object from a dictionary.
 
         Parameters
         ----------
@@ -58,9 +56,7 @@ class Dataset:
         """
         if not isinstance(dict_, dict):
             raise ValueError(
-                "Expected parameter 'dict_' to be of type 'dict' (found {}).".format(
-                    type(dict_).__name__
-                )
+                f"Expected parameter 'dict_' to be of type 'dict' (found {type(dict_).__name__})."
             )
 
         base_ds_id = dict_.get("base_dset", None)
@@ -71,15 +67,14 @@ class Dataset:
             state_type = dict_["type"]
         except KeyError as e:
             raise ValueError(
-                "Expected key '{}' in state dict (found {}).".format(e, dict_.keys())
+                f"Expected key '{e}' in state dict (found {dict_.keys()})."
             )
 
         return cls(state_id, state_type, dataset_id, base_ds_id, is_root)
 
     @property
     def id(self):
-        """
-        Get dataset ID.
+        """Get dataset ID.
 
         Returns
         -------
@@ -90,8 +85,7 @@ class Dataset:
 
     @property
     def state_id(self):
-        """
-        Get State ID.
+        """Get State ID.
 
         Returns
         -------
@@ -102,8 +96,7 @@ class Dataset:
 
     @property
     def state_type(self):
-        """
-        Get type of state.
+        """Get type of state.
 
         Returns
         -------
@@ -114,8 +107,7 @@ class Dataset:
 
     @property
     def is_root(self):
-        """
-        Tell if this is a root dataset.
+        """Tell if this is a root dataset.
 
         Returns
         -------
@@ -126,8 +118,7 @@ class Dataset:
 
     @property
     def base_dataset_id(self):
-        """
-        Get ID of base dataset.
+        """Get ID of base dataset.
 
         Returns
         -------
@@ -137,8 +128,7 @@ class Dataset:
         return self._base_dataset_id
 
     def to_dict(self):
-        """
-        Create dictionary from this Dataset object.
+        """Create dictionary from this Dataset object.
 
         Returns
         -------
