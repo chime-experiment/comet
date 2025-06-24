@@ -1,13 +1,12 @@
 """Contains a state of a dataset."""
 
-from .hash import hash_dictionary
-
 from copy import deepcopy
+
+from .hash import hash_dictionary
 
 
 class State:
-    """
-    A dataset state: links a state ID to some kind of metadata.
+    """A dataset state: links a state ID to some kind of metadata.
 
     Parameters
     ----------
@@ -29,8 +28,7 @@ class State:
 
     @classmethod
     def from_dict(cls, dict_, state_id=None):
-        """
-        Create a `State` object from a dictionary.
+        """Create a `State` object from a dictionary.
 
         Parameters
         ----------
@@ -46,24 +44,21 @@ class State:
         """
         if not isinstance(dict_, dict):
             raise ValueError(
-                "Expected parameter 'json_' to be of type 'dict' (found {}).".format(
-                    type(dict_).__name__
-                )
+                f"Expected parameter 'json_' to be of type 'dict' (found {type(dict_).__name__})."
             )
 
         try:
             state_type = dict_.pop("type")
         except KeyError:
             raise ValueError(
-                "Expected key 'type' in state json (found {}).".format(dict_.keys())
+                f"Expected key 'type' in state json (found {dict_.keys()})."
             )
 
         return cls(dict_, state_type, state_id)
 
     @property
     def data(self):
-        """
-        Get state data.
+        """Get state data.
 
         Returns
         -------
@@ -74,8 +69,7 @@ class State:
 
     @property
     def state_type(self):
-        """
-        Get state type.
+        """Get state type.
 
         Returns
         -------
@@ -86,8 +80,7 @@ class State:
 
     @property
     def id(self):
-        """
-        Get the ID of the state.
+        """Get the ID of the state.
 
         Returns
         -------
@@ -97,8 +90,7 @@ class State:
         return self._id
 
     def to_dict(self):
-        """
-        Generate dictionary from state object.
+        """Generate dictionary from state object.
 
         Returns
         -------

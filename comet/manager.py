@@ -1,16 +1,16 @@
 """CoMeT dataset manager."""
 
-from .dataset import Dataset
-from .exception import BrokerError, ManagerError
-from .state import State
-
 import datetime
 import inspect
-import logging
 import json
+import logging
 import sys
 
 import requests
+
+from .dataset import Dataset
+from .exception import BrokerError, ManagerError
+from .state import State
 
 # Endpoint names:
 REGISTER_STATE = "/register-state"
@@ -31,8 +31,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class Manager:
-    """
-    CoMeT dataset manager.
+    """CoMeT dataset manager.
 
     An interface for the CoMeT dataset broker. State changes are passed to the manager,
     it takes care of registering everything with the broker and keeps local copies to reduce
@@ -48,13 +47,15 @@ class Manager:
             Dataset broker host.
         port : int
             Dataset broker port.
+        noconfig : bool
+            Ddeprecated/unused.
         """
-        self.broker = "http://{}:{}".format(host, port)
+        self.broker = f"http://{host}:{port}"
         self.config_state = None
         self.start_state = None
-        self.states = dict()
-        self.state_reg_time = dict()
-        self.datasets = dict()
+        self.states = {}
+        self.state_reg_time = {}
+        self.datasets = {}
 
     def register_start(self, start_time, version, config=None, register_datasets=False):
         """Register a startup with the broker.
@@ -109,18 +110,14 @@ class Manager:
             )
         if not isinstance(start_time, datetime.datetime):
             raise ManagerError(
-                "start_time needs to be of type 'datetime.datetime' (is {}).".format(
-                    type(start_time).__name__
-                )
+                f"start_time needs to be of type 'datetime.datetime' (is {type(start_time).__name__})."
             )
         # TODO python2 support
-        if sys.version_info < (3, 0) and isinstance(version, unicode):
+        if sys.version_info < (3, 0) and isinstance(version, unicode):  # noqa: F821
             version = version.encode("utf-8")
         if not isinstance(version, str):
             raise ManagerError(
-                "version needs to be of type 'str' (is {}).".format(
-                    type(version).__name__
-                )
+                f"version needs to be of type 'str' (is {type(version).__name__})."
             )
         if self.start_state:
             raise ManagerError(
@@ -130,18 +127,16 @@ class Manager:
         if config:
             if not isinstance(config, dict):
                 raise ManagerError(
-                    "config needs to be a dictionary (is `{}`).".format(
-                        type(config).__name__
-                    )
+                    f"config needs to be a dictionary (is `{type(config).__name__}`)."
                 )
 
             # get name of callers module
             name = inspect.getmodule(inspect.stack()[1][0]).__name__
             if name == "__main__":
                 name = inspect.getmodule(inspect.stack()[1][0]).__file__
-            logger.info("Registering config for {}.".format(name))
+            logger.info(f"Registering config for {name}.")
 
-            config_state = State(config, "config_{}".format(name))
+            config_state = State(config, f"config_{name}")
 
             state_id = config_state.id
 
@@ -165,7 +160,7 @@ class Manager:
         name = inspect.getmodule(inspect.stack()[1][0]).__name__
         if name == "__main__":
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
-        logger.info("Registering startup for {}.".format(name))
+        logger.info(f"Registering startup for {name}.")
 
         data = {
             "time": start_time.strftime(TIMESTAMP_FORMAT),
@@ -173,7 +168,7 @@ class Manager:
         }
         if config and not register_datasets:
             data["config_state"] = self.config_state.to_dict()
-        start_state = State(data, "start_{}".format(name))
+        start_state = State(data, f"start_{name}")
 
         state_id = start_state.id
 
@@ -203,12 +198,10 @@ class Manager:
                 )
             # Todo: deprecated
             # If there's no config, register the start state with a root dataset.
-            else:
-                return self.register_dataset(
-                    start_state, None, start_state.state_type, True
-                )
-        else:
-            return None
+            return self.register_dataset(
+                start_state, None, start_state.state_type, True
+            )
+        return None
 
     def register_config(self, config):
         """Register a static config with the broker.
@@ -246,9 +239,7 @@ class Manager:
         )
         if not isinstance(config, dict):
             raise ManagerError(
-                "config needs to be a dictionary (is `{}`).".format(
-                    type(config).__name__
-                )
+                f"config needs to be a dictionary (is `{type(config).__name__}`)."
             )
         if not self.start_state:
             raise ManagerError(
@@ -259,9 +250,9 @@ class Manager:
         name = inspect.getmodule(inspect.stack()[1][0]).__name__
         if name == "__main__":
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
-        logger.info("Registering config for {}.".format(name))
+        logger.info(f"Registering config for {name}.")
 
-        state = State(config, "config_{}".format(name))
+        state = State(config, f"config_{name}")
 
         state_id = state.id
 
@@ -290,7 +281,7 @@ class Manager:
 
         Parameters
         ----------
-        state : dict
+        data : dict
             The state should be a JSON-serializable dictionary.
         state_type : str
             The name of the state type (e.g. "inputs", "metadata"). Be careful not choosing
@@ -320,7 +311,7 @@ class Manager:
         """
         if not (isinstance(data, dict) or data is None):
             raise ManagerError(
-                "data needs to be a dictionary (is `{}`).".format(type(data).__name__)
+                f"data needs to be a dictionary (is `{type(data).__name__}`)."
             )
         if not self.start_state:
             raise ManagerError(
@@ -394,7 +385,7 @@ class Manager:
             state = state.id
         if not isinstance(state, str):
             raise ManagerError(
-                "state needs to be a hash (str) (is `{}`).".format(type(state).__name__)
+                f"state needs to be a hash (str) (is `{type(state).__name__}`)."
             )
 
         # check type of base dataset
@@ -403,7 +394,7 @@ class Manager:
         if not (isinstance(base_ds, str) or (root and base_ds is None)):
             raise ManagerError(
                 "base_ds needs to be a hash (str) or `None` if this is a root dataset (base_ds "
-                "is `{}`).".format(type(base_ds).__name__)
+                f"is `{type(base_ds).__name__}`)."
             )
 
         if not self.start_state:
@@ -439,26 +430,24 @@ class Manager:
             reply.raise_for_status()
         except requests.exceptions.HTTPError as err:
             raise BrokerError(
-                "Failure connecting to comet.broker at {}{} (make sure it's running): {}".format(
-                    self.broker, endpoint, err
-                )
+                f"Failure connecting to comet.broker at {self.broker}{endpoint} (make sure it's running): {err}"
             )
         except requests.exceptions.ConnectionError:
             raise BrokerError(
-                "Failure connecting to comet.broker at {}{}: make sure it is "
-                "running.".format(self.broker, endpoint)
+                f"Failure connecting to comet.broker at {self.broker}{endpoint}: make sure it is "
+                "running."
             )
         except requests.exceptions.ReadTimeout:
             raise BrokerError(
-                "Timeout when connecting to comet.broker at {}{}: make sure it is "
-                "running.".format(self.broker, endpoint)
+                f"Timeout when connecting to comet.broker at {self.broker}{endpoint}: make sure it is "
+                "running."
             )
         reply = reply.json()
         self._check_result(reply.get("result"), endpoint)
         return reply
 
     def _send_state(self, state, dump=True):
-        logger.debug("sending state {}".format(state.id))
+        logger.debug(f"sending state {state.id}")
 
         request = {"hash": state.id, "state": state.to_dict(), "dump": dump}
         self._send(SEND_STATE, request)
@@ -466,14 +455,11 @@ class Manager:
     def _check_result(self, result, endpoint):
         if result != "success":
             raise BrokerError(
-                "The {}{} answered with result `{}`, expected `success`.".format(
-                    self.broker, endpoint, result
-                )
+                f"The {self.broker}{endpoint} answered with result `{result}`, expected `success`."
             )
 
     def get_state(self, type=None, dataset_id=None):
-        """
-        Given a dataset ID, get the last state of a given type.
+        """Given a dataset ID, get the last state of a given type.
 
         If called without parameters, this returns the static config that was registered.
 
@@ -506,7 +492,7 @@ class Manager:
             if type is None:
                 return self.config_state
 
-            states_of_type = list()
+            states_of_type = []
             for state_id in self.states:
                 state = self.states[state_id]
                 if state.state_type == type:
@@ -516,25 +502,21 @@ class Manager:
                 states_of_type.sort(key=lambda s: self.state_reg_time[state_id])
                 return states_of_type[-1]
             return None
-        else:
-            # traverse the tree towards the root to find a matching state type
-            while True:
-                dataset = self.get_dataset(dataset_id)
-                if type is None or type == dataset.state_type:
-                    return self._get_state(dataset.state_id)
-                if dataset.is_root == True:
-                    return None
-                dataset_id = dataset.base_dataset_id
-                if dataset_id is None:
-                    raise ManagerError(
-                        "Found a dataset that is not root nor has a base dataset ID: {}".format(
-                            dataset.to_dict()
-                        )
-                    )
+        # traverse the tree towards the root to find a matching state type
+        while True:
+            dataset = self.get_dataset(dataset_id)
+            if type is None or type == dataset.state_type:
+                return self._get_state(dataset.state_id)
+            if dataset.is_root:
+                return None
+            dataset_id = dataset.base_dataset_id
+            if dataset_id is None:
+                raise ManagerError(
+                    f"Found a dataset that is not root nor has a base dataset ID: {dataset.to_dict()}"
+                )
 
     def _get_state(self, state_id):
-        """
-        Get a state by ID.
+        """Get a state by ID.
 
         If not known locally, the dataset broker is asked. Returns `None` if the state
         is still unknown.
@@ -556,13 +538,12 @@ class Manager:
                 reply = self._send(REQUEST_STATE, {"id": state_id}, "post")
                 self.states[state_id] = State.from_dict(reply["state"], state_id)
             except BrokerError as err:
-                logger.warning("Failure requesting state {}: {}".format(state_id, err))
+                logger.warning(f"Failure requesting state {state_id}: {err}")
                 return None
             return self.states[state_id]
 
     def get_dataset(self, dataset_id=None):
-        """
-        Get a dataset.
+        """Get a dataset.
 
         If called without parameters, this returns the dataset added last.
 
@@ -587,8 +568,7 @@ class Manager:
             return self.datasets.get(dataset_id, None)
 
     def _update_datasets(self, dataset_id):
-        """
-        Get dataset update from broker.
+        """Get dataset update from broker.
 
         Gets an update on new datasets known to the broker since the last update.
 
@@ -603,7 +583,7 @@ class Manager:
         BrokerError
             If there was an error when communicating with the broker.
         """
-        logger.debug("Requesting dataset update for ID {}...".format(dataset_id))
+        logger.debug(f"Requesting dataset update for ID {dataset_id}...")
         data = {
             "ds_id": dataset_id,
         }
@@ -615,8 +595,7 @@ class Manager:
             self.datasets[id] = ds
 
     def broker_status(self):
-        """
-        Get dataset broker status.
+        """Get dataset broker status.
 
         Returns
         -------
@@ -629,8 +608,7 @@ class Manager:
         return response["running"]
 
     def _get_states(self):
-        """
-        Get all state IDs known to dataset broker.
+        """Get all state IDs known to dataset broker.
 
         Returns
         -------
@@ -641,8 +619,7 @@ class Manager:
         return response["states"]
 
     def _get_datasets(self):
-        """
-        Get all dataset IDs known to dataset broker.
+        """Get all dataset IDs known to dataset broker.
 
         Returns
         -------
