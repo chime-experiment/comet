@@ -4,7 +4,6 @@ import datetime
 import inspect
 import json
 import logging
-import sys
 
 import requests
 
@@ -108,13 +107,12 @@ class Manager:
                 "version)` will be removed in a future version. It is replaced with "
                 "`register_start(start_time, version, config)` to simplify the API."
             )
+
         if not isinstance(start_time, datetime.datetime):
             raise ManagerError(
                 f"start_time needs to be of type 'datetime.datetime' (is {type(start_time).__name__})."
             )
-        # TODO python2 support
-        if sys.version_info < (3, 0) and isinstance(version, unicode):  # noqa: F821
-            version = version.encode("utf-8")
+
         if not isinstance(version, str):
             raise ManagerError(
                 f"version needs to be of type 'str' (is {type(version).__name__})."
