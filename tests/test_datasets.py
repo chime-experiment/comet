@@ -37,7 +37,8 @@ G = {"b": 1}
 H = {"blubb": "bla"}
 J = {"meta": "data"}
 
-now = datetime.now(timezone.utc)
+now_sys = datetime.now()
+now = now_sys.astimezone(timezone.utc)
 version = "0.1.1"
 
 
@@ -49,22 +50,17 @@ except chimedb.core.exceptions.ConnectionError:
     has_chimedb = False
 
 
-# Todo: deprecated
 @pytest.fixture(scope="session", autouse=True)
 def manager():
     manager = Manager("localhost", PORT)
 
     assert manager.register_start(now, version, CONFIG) is None
-    # manager.register_config(CONFIG)
     return manager
 
 
 @pytest.fixture(scope="session", autouse=True)
-def manager_new():
-    manager = Manager("localhost", PORT)
-
-    assert manager.register_start(now, version, CONFIG) is None
-    return manager
+def unregistered_manager():
+    return Manager("localhost", PORT)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -156,6 +152,11 @@ def simple_ds(manager):
     yield (dset.id, state.id)
 
 
+# =====
+# Tests
+# =====
+
+
 def test_hash(manager):
     assert isinstance(manager, Manager)
 
@@ -171,6 +172,16 @@ def test_register_config(manager, broker):
     expected_config_dump["type"] = "config_{}".format(__name__)
 
     assert expected_config_dump == manager.get_state().to_dict()
+
+
+@pytest.mark.parametrize("start_time", [now, now_sys, now_sys.astimezone()])
+def test_register_timezone(unregistered_manager, broker, start_time):
+    # Start up the manager with given start times
+    assert unregistered_manager.register_start(start_time, version, CONFIG) is None
+    # Check that the state start time is in UTC
+    assert datetime.strptime(
+        manager.start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f"
+    ) == now.replace(tzinfo=None)
 
 
 # TODO: register stuff here, then with a new broker test recovery in test_recover
@@ -425,13 +436,13 @@ def test_gather_update(simple_ds, manager, broker):
     assert dset2.id in result["datasets"]
 
 
-def test_get_dataset(simple_ds, manager_new, broker):
+def test_get_dataset(simple_ds, manager, broker):
     """Test to get a dataset from a new manager requesting it from the broker."""
 
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
 
-    test_ds = manager_new.get_dataset(dset_id)
+    test_ds = manager.get_dataset(dset_id)
 
     assert test_ds.state_id == state_id
 
@@ -444,23 +455,23 @@ def test_get_dataset_failure(manager_low_timeout, broker_low_timeout):
         manager_low_timeout.get_dataset(1234567890)
 
 
-def test_get_state(simple_ds, manager_new, broker):
+def test_get_state(simple_ds, manager, broker):
     """Test to get a state from a new manager requesting it from the broker."""
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
 
-    test_state = manager_new.get_state(type="test", dataset_id=dset_id)
-    test_state2 = manager_new._get_state(state_id)
+    test_state = manager.get_state(type="test", dataset_id=dset_id)
+    test_state2 = manager._get_state(state_id)
 
     assert test_state.state_type == "test"
     assert test_state.data["foo"] == "bar"
     assert test_state.to_dict() == test_state2.to_dict()
 
 
-def test_get_state_failure(simple_ds, manager_new, broker):
+def test_get_state_failure(simple_ds, manager, broker):
     """Test to get a nonexistent state from a new manager."""
 
-    test_state = manager_new.get_state(987654321)
+    test_state = manager.get_state(987654321)
 
     assert test_state is None
 
