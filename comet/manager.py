@@ -4,6 +4,7 @@ import datetime
 import inspect
 import json
 import logging
+import re
 
 import requests
 
@@ -49,6 +50,26 @@ class Manager:
         noconfig : bool
             Ddeprecated/unused.
         """
+        # Validate the host
+        if not re.fullmatch(r"[a-zA-Z0-9.-]*", host):
+            raise ValueError(
+                f"Invalid host: {host}. Only alphanumeric characters, dot, and dash are allowed."
+            )
+
+        # If port is a string or float, make sure it can be represented as int
+        if isinstance(port, float) and (int(port) == float(port)):
+            port = int(port)
+        elif isinstance(port, str):
+            try:
+                port = int(port)
+            except ValueError as exc:
+                raise ValueError(f"Invalid port: {port}.") from exc
+
+        if (port < 1) or (port > 65535):
+            raise ValueError(
+                f"Invalid port: {port}. Only integers in range 1-65535, inclusive, are allowed."
+            )
+
         self.broker = f"http://{host}:{port}"
         self.config_state = None
         self.start_state = None
