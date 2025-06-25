@@ -94,7 +94,8 @@ class Manager:
         Parameters
         ----------
         start_time : :class:`datetime.datetime`
-            The time in UTC when the program was started.
+            The time in UTC when the program was started. If the time is not in UTC but timezone
+            info is provided, the time will be converted to UTC. Otherwise, UTC is assumed.
         version : str
             A unique string identifying the version of this software. This should include version
             tags, and if applicable git commit hashes as well as the "dirty" state of the local
@@ -180,6 +181,16 @@ class Manager:
         if name == "__main__":
             name = inspect.getmodule(inspect.stack()[1][0]).__file__
         logger.info(f"Registering startup for {name}.")
+
+        # Ensure the start time is in UTC. Can't directly use `datetime.astimezone`
+        # in all cases, because this assumes that naive datetimes are in the
+        # systems's timezone
+        if start_time.tzinfo is None:
+            # This is a naive datetime. Assume it's already UTC
+            start_time = start_time.replace(tzinfo=datetime.timezone.utc)
+        else:
+            # Timezone aware, so make sure it's in UTC
+            start_time = start_time.astimezone(datetime.timezone.utc)
 
         data = {
             "time": start_time.strftime(TIMESTAMP_FORMAT),
