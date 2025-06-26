@@ -1,3 +1,9 @@
+Comet - COnfig & MEtadata Tracker
+
+Comet is designed to track various config and metadata properties of the CHIME system,
+and to associate dataset with the state of these properties that were active when
+the data was collected.
+
 Installation
 ------------
 Comet requires a running redis server:
@@ -5,18 +11,13 @@ Comet requires a running redis server:
   sudo apt-get install redis
   sudo systemctl start redis
   
-Download comet:
+Comet can then be installed in the usual way, either by cloning the repo or installing directly from GitHub:
 
   git clone https://github.com/chime-experiment/comet.git
-  cd comet
-  
-pymysql requires mysql_config so install:
+  cd comet/
+  pip install .
 
-  sudo apt-get install mysql-server libmysqlclient-dev
-  
-Install comet:
-
-  sudo pip3 install . -r requirements.txt
+  pip install https://github.com/chime-experiment/comet.git
   
 Running Comet
 -------------
