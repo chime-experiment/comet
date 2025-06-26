@@ -59,11 +59,6 @@ def manager():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def unregistered_manager():
-    return Manager("localhost", PORT)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def manager_and_dataset():
     manager = Manager("localhost", PORT)
 
@@ -175,13 +170,35 @@ def test_register_config(manager, broker):
 
 
 @pytest.mark.parametrize("start_time", [now, now_sys, now_sys.astimezone()])
-def test_register_timezone(unregistered_manager, broker, start_time):
+def test_register_timezone(start_time):
+    # Make a manager
+    manager = Manager("localhost", PORT)
     # Start up the manager with given start times
-    assert unregistered_manager.register_start(start_time, version, CONFIG) is None
+    assert manager.register_start(start_time, version, CONFIG) is None
     # Check that the state start time is in UTC
     assert datetime.strptime(
         manager.start_state.data["time"], "%Y-%m-%d-%H:%M:%S.%f"
     ) == now.replace(tzinfo=None)
+
+
+@pytest.mark.parametrize("host", [":", "><", "localhost^"])
+def test_catch_bad_host(host):
+    with pytest.raises(ValueError):
+        Manager(host, PORT)
+
+
+@pytest.mark.parametrize("port", [-1, 0, 65536, 0.123, "port"])
+def test_catch_bad_port(port):
+    with pytest.raises(ValueError):
+        Manager("localhost", port)
+
+
+@pytest.mark.parametrize("host", ["localhost", "123", "127.0.0.1"])
+@pytest.mark.parametrize("port", [1, 65535, 31, 8888])
+def test_valid_host_port(host, port):
+    manager = Manager(host, port)
+
+    assert manager.broker == f"http://{host}:{port}"
 
 
 # TODO: register stuff here, then with a new broker test recovery in test_recover
