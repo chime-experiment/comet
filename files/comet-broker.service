@@ -1,0 +1,16 @@
+[Unit]
+Description=CoMeT Broker
+After=syslog.target network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/comet_virtualenv/bin/comet broker
+ExecReload=/bin/kill -HUP $MAINPID
+# Allow comet to open 10k redis connections
+LimitNOFILE=11024
+
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

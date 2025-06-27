@@ -1,0 +1,15 @@
+[Unit]
+Description=CoMeT Archiver
+After=syslog.target remote-fs.target
+
+[Service]
+Type=simple
+# Set failure wait time to 500ms.
+ExecStart=/opt/comet_virtualenv/bin/comet archiver -t 500
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
