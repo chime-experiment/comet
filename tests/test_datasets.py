@@ -16,7 +16,6 @@ from comet.manager import REGISTER_DATASET
 import chimedb.dataset
 import chimedb.core
 
-
 _file_directory = os.path.dirname(os.path.realpath(__file__))
 CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
 CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
