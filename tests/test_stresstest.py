@@ -117,6 +117,9 @@ def test_stress_update_datasets(manager_and_dataset, broker):
     ds = manager.register_dataset(s5, base_ds, "fifth")
 
     start = time.time()
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
     loop.run_until_complete(sendalot(ds.id, base_ds.id, root_ds_id, s5.id, start))
     print(time.time() - start)

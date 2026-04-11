@@ -18,7 +18,7 @@ maintainers = [
     { name = "Don Wiebe", email = "dvw@phas.ubc.ca" }
 ]
 dynamic = ["readme", "version"]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10"
 dependencies = [
     "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
     "chimedb.dataset @ git+https://github.com/chime-experiment/chimedb_dataset.git",
