@@ -145,26 +145,10 @@ class Manager:
 
         name = module.__file__ if module.__name__ == "__main__" else module.__name__
 
-        logger.info(f"Registering config for {name}.")
-
-        config_state = State(config, f"config_{name}")
-        state_id = config_state.id
-
-        request = {"hash": state_id}
-        reply = self._send(REGISTER_STATE, request)
-
-        # Does the broker ask for the state?
-        if reply.get("request") == "get_state":
-            if reply.get("hash") != state_id:
-                raise BrokerError(
-                    f"The broker is asking for state {reply.get('hash')} when "
-                    f"state {state_id} (config) was registered."
-                )
-            self._send_state(config_state)
-
-        self.states[state_id] = config_state
-        self.config_state = config_state
-        self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
+        logger.info(f"Registering config state for {name}.")
+        self.config_state = self.register_state(
+            config, f"config_{name}", dump=False, is_start=True
+        )
 
         logger.info(f"Registering startup for {name}.")
         # Ensure the start time is in UTC. Can't directly use `datetime.astimezone`
@@ -181,37 +165,26 @@ class Manager:
             "time": start_time.strftime(TIMESTAMP_FORMAT),
             "version": version,
         }
-        if config and not register_datasets:
+        if not register_datasets:
             data["config_state"] = self.config_state.to_dict()
 
-        start_state = State(data, f"start_{name}")
-        state_id = start_state.id
-
-        request = {"hash": state_id}
-        reply = self._send(REGISTER_STATE, request)
-
-        # Does the broker ask for the state?
-        if reply.get("request") == "get_state":
-            if reply.get("hash") != state_id:
-                raise BrokerError(
-                    "The broker is asking for state {} when state {} (start) was "
-                    "registered.".format(reply.get("hash"), state_id)
-                )
-            self._send_state(start_state)
-
-        self.states[state_id] = start_state
-        self.start_state = start_state
-        self.state_reg_time[state_id] = datetime.datetime.now(datetime.timezone.utc)
+        self.start_state = self.register_state(
+            data, f"start_{name}", dump=False, is_start=True
+        )
 
         if register_datasets:
             config_ds = self.register_dataset(
-                config_state, None, config_state.state_type, True
+                self.config_state, None, self.config_state.state_type, True
             )
-            return self.register_dataset(start_state, config_ds, start_state.state_type)
+            return self.register_dataset(
+                self.start_state, config_ds, self.start_state.state_type
+            )
 
         return None
 
-    def register_state(self, data, state_type, dump=True, timestamp=None):
+    def register_state(
+        self, data, state_type, dump=True, timestamp=None, is_start=False
+    ):
         """Register a state with the broker.
 
         This does not attach the state to a dataset. (yet!)
@@ -230,6 +203,8 @@ class Manager:
             `comet.manager.TIMESTAMP_FORMAT`. If this is `None`, the broker will use the current
             time. Only supply this if you know what you're doing. This is for example to resend
             previously dumped states to the broker again after a crash.
+        is_start : bool
+            Tells the broker that this is a startup state.
 
         Returns
         -------
@@ -250,10 +225,16 @@ class Manager:
             raise ManagerError(
                 f"data needs to be a dictionary (is `{type(data).__name__}`)."
             )
-        if not self.start_state:
+        if not is_start and self.start_state is None:
             raise ManagerError(
                 "Start has to be registered before anything else "
                 "(use 'register_start()')."
+            )
+
+        if is_start and self.start_state is not None:
+            raise ManagerError(
+                "Caller indicated that this is a startup state, but Start "
+                "has already been registered!"
             )
 
         state = State(data, state_type)
