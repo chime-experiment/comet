@@ -40,6 +40,9 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REQUESTED_STATE_TIMEOUT = 35
 REDIS_SERVER = (REDIS_HOST, REDIS_PORT)
 
+# declare, but don't initialize, the global redis connection
+redis: aioredis.Redis
+
 # config variable
 wait_time = None
 
@@ -784,7 +787,7 @@ class Broker:
 
         At the moment this only deletes members of the set "requested_states".
         """
-        r = redis_sync.Redis(REDIS_SERVER[0], REDIS_SERVER[1])
+        r = _connect_redis(REDIS_SERVER[0], REDIS_SERVER[1])
         hashes = r.hkeys("requested_states")
         for state_hash in hashes:
             logger.warning(
@@ -861,19 +864,54 @@ async def _create_locks(_, loop):
 
 # Create the Redis connection pool, use sanic to start it so that it
 # ends up in the same event loop
-# At the same time create the locks that we will need
 async def _init_redis_async(_, loop):
     logger.setLevel(logging.DEBUG)
     global redis
     url = "redis://{}:{}".format(*REDIS_SERVER)
-    redis = aioredis.from_url(
+
+    r = aioredis.from_url(
         url,
         encoding="utf-8",
         max_connections=20,
         health_check_interval=30,
         retry_on_timeout=True,
         socket_keepalive=True,
+        protocol=2,
     )
+    info = await r.info("server")
+    redis_version = info["redis_version"]
+    major_version = int(redis_version.split(".")[0])
+
+    # if supported by the server, use a newer protocol. Otherwise,
+    # just return the existing connection
+    if major_version >= 6:
+        r = aioredis.from_url(
+            url,
+            encoding="utf-8",
+            max_connections=20,
+            health_check_interval=30,
+            retry_on_timeout=True,
+            socket_keepalive=True,
+            protocol=3,
+        )
+
+    redis = r
+
+
+# Synchronous redis connection. Fall back to protocol=2
+# if the server is running redis<6.0
+def _connect_redis(*connection_args, **connection_kwargs):
+    r = redis_sync.Redis(*connection_args, **connection_kwargs, protocol=2)
+
+    redis_version = r.info("server")["redis_version"]
+    major_version = int(redis_version.split(".")[0])
+
+    # if supported by the server, use a newer protocol. Otherwise,
+    # just return the existing connection
+    if major_version >= 6:
+        r = redis_sync.Redis(*connection_args, **connection_kwargs, protocol=3)
+
+    return r
 
 
 app.register_listener(_init_redis_async, "before_server_start")

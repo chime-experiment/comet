@@ -11,10 +11,10 @@ import time
 import chimedb.core as chimedb
 import chimedb.dataset as db
 import orjson as json
-import redis
 from peewee import DoesNotExist
 
 from . import CometError, Manager, __version__
+from .broker import _connect_redis
 from .manager import TIMESTAMP_FORMAT
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ class Archiver:
         chimedb.orm.create_tables("chimedb.dataset")
 
         # Open connection to redis
-        self.redis = redis.Redis(
+        self.redis = _connect_redis(
             redis_host,
             redis_port,
             encoding="utf-8",

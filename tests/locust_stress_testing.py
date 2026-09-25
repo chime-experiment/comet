@@ -1,5 +1,4 @@
-"""
-Code for running stress tests using locust.
+"""Code for running stress tests using locust.
 
 https://docs.locust.io/en/latest/installation.html
 
@@ -8,15 +7,14 @@ Code for the locust client is located in tests/DummyClient.py.
 """
 
 import datetime
-import time
 import os
-import signal
 import random
+import signal
+import time
 from subprocess import Popen
 
-from locust import TaskSet, task
-
 from DummyClient import DummyClientLocust
+from locust import TaskSet, task
 
 _file_directory = os.path.dirname(os.path.realpath(__file__))
 CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
@@ -75,8 +73,7 @@ class MyTasks(TaskSet):
 
     @task(5)
     def register_small_dataset(self):
-        """
-        Register a small dataset with the CoMeT broker.
+        """Register a small dataset with the CoMeT broker.
 
         Associate it with the current base dataset.
         It is now the new base dataset.
@@ -89,8 +86,7 @@ class MyTasks(TaskSet):
 
     @task(1)
     def register_large_dataset(self):
-        """
-        Register a large dataset with the CoMeT broker.
+        """Register a large dataset with the CoMeT broker.
 
         Associate it with the current base dataset.
         It is now the new base dataset.
@@ -104,7 +100,6 @@ class MyTasks(TaskSet):
     @task(4)
     def update_dataset(self):
         """Make a call to /update-dataset using a randomly chosen registered dataset."""
-
         if self.client.datasets:
             ds_id = random.choice(list(self.client.datasets))
             self.client.update_datasets(ds_id)
@@ -118,8 +113,7 @@ class MyTasks(TaskSet):
 
 
 class DummyManager(DummyClientLocust):
-    """
-    Configuration for the CoMeT locust tests.
+    """Configuration for the CoMeT locust tests.
 
     Attributes
     ----------
@@ -141,7 +135,7 @@ class DummyManager(DummyClientLocust):
 
     def setup(self):
         """Set up operations before any of the locusts start up."""
-        assert os.path.isfile(CHIMEDBRC), "Could not find {}.".format(CHIMEDBRC)
+        assert os.path.isfile(CHIMEDBRC), f"Could not find {CHIMEDBRC}."
         os.environ["CHIMEDB_TEST_RC"] = CHIMEDBRC
 
         # Make sure that we don't write to the actual chime database
