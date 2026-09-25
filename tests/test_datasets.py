@@ -127,9 +127,9 @@ def archiver(broker):
             "archiver",
             "-t",
             "10",
-            "--broker_port",
+            "--broker-port",
             PORT,
-            "--log_level",
+            "--log-level",
             "DEBUG",
         ]
     )
