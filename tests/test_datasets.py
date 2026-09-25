@@ -161,9 +161,9 @@ def test_hash(manager):
     assert hash_dictionary(A) != hash_dictionary(E)
 
 
-def test_register_config(manager, broker):
+def test_config_exists(manager, broker):
     expected_config_dump = CONFIG
-    expected_config_dump["type"] = "config_{}".format(__name__)
+    expected_config_dump["type"] = f"config_{__name__}"
 
     assert expected_config_dump == manager.get_state().to_dict()
 
@@ -205,17 +205,16 @@ def test_register(manager, broker):
     pass
 
 
-def test_recover(manager, broker, simple_ds):
+def test_manager_has_states_and_datasets(manager, broker, simple_ds):
     dset_id = simple_ds[0]
 
-    # Give archiver a moment
+    # Give broker a moment
     time.sleep(2)
     assert manager.broker_status()
-    manager.register_config({"blubb": 1})
-    time.sleep(0.1)
 
     ds = manager.get_dataset(dset_id)
     state = manager.get_state("test")
+
     assert state.to_dict() == {"foo": "bar", "type": "test"}
     assert ds.is_root is True
     # TODO: fix hash function # assert ds["state"] == manager._make_hash(state)
