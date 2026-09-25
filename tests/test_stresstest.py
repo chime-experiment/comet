@@ -1,19 +1,19 @@
-import aiohttp
 import asyncio
 import os
-import time
-import pytest
-from random import shuffle
 import signal
-
+import time
 from datetime import datetime, timezone
+from random import shuffle
 from subprocess import Popen
+
+import aiohttp
+import pytest
 
 from comet import Manager
 
 _file_directory = os.path.dirname(os.path.realpath(__file__))
 CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
-CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
+CHIMEDBRC_MESSAGE = f"Could not find {CHIMEDBRC}."
 PORT = "8000"
 PORT_LOW_TIMEOUT = "8080"
 
@@ -68,16 +68,16 @@ async def fetch(session, url, json):
 async def sendalot(ds, base_ds, root_ds, state, start):
     json_update_ds = {"ds_id": ds, "ts": "0", "roots": []}
     json_update_ds_with_roots = {"ds_id": ds, "ts": 0, "roots": [root_ds]}
-    url_update_ds = "http://localhost:{}/update-datasets".format(PORT)
+    url_update_ds = f"http://localhost:{PORT}/update-datasets"
 
     json_register_state = {"hash": state}
-    url_register_state = "http://localhost:{}/register-state".format(PORT)
+    url_register_state = f"http://localhost:{PORT}/register-state"
 
     json_register_ds = {
         "hash": ds,
         "ds": {"base_dset": base_ds, "state": state, "is_root": False, "type": "fifth"},
     }
-    url_register_ds = "http://localhost:{}/register-dataset".format(PORT)
+    url_register_ds = f"http://localhost:{PORT}/register-dataset"
 
     timeout = aiohttp.ClientTimeout(total=100)
     async with aiohttp.ClientSession(timeout=timeout) as session:

@@ -1,18 +1,14 @@
 """DummyClient for locust testing CoMeT broker."""
 
-import time
 import inspect
-import random
-import string
 import json
-import copy
+import time
 
-import requests
-import datetime
 import mmh3
-from locust import events, Locust
+import requests
+from locust import Locust, events
 
-from comet import CometError, ManagerError, BrokerError
+from comet import BrokerError
 
 REGISTER_STATE = "/register-state"
 REQUEST_STATE = "/request-state"
@@ -59,8 +55,7 @@ def stopwatch(func):
 
 
 class DummyClient:
-    """
-    Dummy Client that interfaces with the CoMeT dataset broker.
+    """Dummy Client that interfaces with the CoMeT dataset broker.
 
     Used for locust load testing.
     """
@@ -75,7 +70,7 @@ class DummyClient:
         broker_port : int
             Dataset broker port.
         """
-        self.broker = "http://{}:{}".format(broker_host, broker_port)
+        self.broker = f"http://{broker_host}:{broker_port}"
         self.states = list()
         self.datasets = list()
 
@@ -101,7 +96,6 @@ class DummyClient:
             If the broker can't be reached
 
         """
-
         if state_type:
             state["type"] = state_type
 
@@ -120,8 +114,7 @@ class DummyClient:
 
     @stopwatch
     def request_state(self, state_id):
-        """
-        Request the state with the given ID.
+        """Request the state with the given ID.
 
         Parameters
         ----------
@@ -188,7 +181,6 @@ class DummyClient:
             Hash for the given roots that are included in the returned update.
             If the root of the given dataset is not among them, all datasets with the same root as the given dataset are returned.
         """
-
         request = {"ds_id": ds_id, "ts": timestamp, "roots": roots}
 
         response = self._send(UPDATE_DATASETS, request)
@@ -208,15 +200,11 @@ class DummyClient:
             reply.raise_for_status()
         except requests.exceptions.ConnectionError:
             raise BrokerError(
-                "Failure connecting to comet.broker at {}{}: make sure it is running".format(
-                    self.broker, endpoint
-                )
+                f"Failure connecting to comet.broker at {self.broker}{endpoint}: make sure it is running"
             )
         except requests.exceptions.ReadTimeout:
             raise BrokerError(
-                "Timeout when connecting to comet.broker at {}{}: make sure it is running.".format(
-                    self.broker, endpoint
-                )
+                f"Timeout when connecting to comet.broker at {self.broker}{endpoint}: make sure it is running."
             )
 
         reply = reply.json()
@@ -225,25 +213,22 @@ class DummyClient:
     def _check_result(self, result, endpoint):
         if result != "success":
             raise BrokerError(
-                "The {}{} answered with result `{}`, expected 'success'.".format(
-                    self.broker, endpoint, result
-                )
+                f"The {self.broker}{endpoint} answered with result `{result}`, expected 'success'."
             )
 
     def _send_state(self, state_id, state, dump=True):
-        print("sending state {}".format(state_id))
+        print(f"sending state {state_id}")
 
         request = {"hash": state_id, "state": state, "dump": dump}
         self._send(SEND_STATE, request)
 
 
 class DummyClientLocust(Locust):
-    """
-    Dummy Client Locust class. Contains DummyClient client.
+    """Dummy Client Locust class. Contains DummyClient client.
 
     Used for locust load testing.
     """
 
     def __init__(self):
         self.client = DummyClient(self.host, self.port)
-        super(DummyClientLocust, self).__init__()
+        super().__init__()

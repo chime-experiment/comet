@@ -1,24 +1,23 @@
 import json
 import os
-import time
-import pytest
-import redis
-import requests
 import signal
-
+import time
 from datetime import datetime, timezone
 from subprocess import Popen
 
-from comet import Manager, BrokerError, State, Dataset
+import chimedb.core
+import chimedb.dataset
+import pytest
+import requests
+
+from comet import BrokerError, Dataset, Manager, State
+from comet.broker import _connect_redis
 from comet.hash import hash_dictionary
 from comet.manager import REGISTER_DATASET
 
-import chimedb.dataset
-import chimedb.core
-
 _file_directory = os.path.dirname(os.path.realpath(__file__))
 CHIMEDBRC = os.path.join(_file_directory + "/.chimedb_test_rc")
-CHIMEDBRC_MESSAGE = "Could not find {}.".format(CHIMEDBRC)
+CHIMEDBRC_MESSAGE = f"Could not find {CHIMEDBRC}."
 
 PORT = "8000"
 PORT_LOW_TIMEOUT = "8080"
@@ -127,9 +126,9 @@ def archiver(broker):
             "archiver",
             "-t",
             "10",
-            "--broker_port",
+            "--broker-port",
             PORT,
-            "--log_level",
+            "--log-level",
             "DEBUG",
         ]
     )
@@ -161,9 +160,9 @@ def test_hash(manager):
     assert hash_dictionary(A) != hash_dictionary(E)
 
 
-def test_register_config(manager, broker):
+def test_config_exists(manager, broker):
     expected_config_dump = CONFIG
-    expected_config_dump["type"] = "config_{}".format(__name__)
+    expected_config_dump["type"] = f"config_{__name__}"
 
     assert expected_config_dump == manager.get_state().to_dict()
 
@@ -205,17 +204,16 @@ def test_register(manager, broker):
     pass
 
 
-def test_recover(manager, broker, simple_ds):
+def test_manager_has_states_and_datasets(manager, broker, simple_ds):
     dset_id = simple_ds[0]
 
-    # Give archiver a moment
+    # Give broker a moment
     time.sleep(2)
     assert manager.broker_status()
-    manager.register_config({"blubb": 1})
-    time.sleep(0.1)
 
     ds = manager.get_dataset(dset_id)
     state = manager.get_state("test")
+
     assert state.to_dict() == {"foo": "bar", "type": "test"}
     assert ds.is_root is True
     # TODO: fix hash function # assert ds["state"] == manager._make_hash(state)
@@ -271,7 +269,8 @@ def test_archiver(archiver, simple_ds, manager, broker):
 @pytest.mark.skipif(not has_chimedb, reason="No connection to chimedb")
 def test_archiver_run(archiver):
     """Test a run of the archiver to make sure it works."""
-    r = redis.Redis("127.0.0.1", 6379)
+    r = _connect_redis("127.0.0.1", 6379)
+
     r.ltrim("archive_dataset", 1, 0)
     r.ltrim("archive_state", 1, 0)
     assert r.llen("archive_dataset") == 0
@@ -443,7 +442,7 @@ def test_gather_update(simple_ds, manager, broker):
     dset2 = manager.register_dataset(state.id, dset1.id, "test", False)
 
     result = requests.post(
-        "http://localhost:{}/update-datasets".format(PORT),
+        f"http://localhost:{PORT}/update-datasets",
         json={"ds_id": dset2.id, "ts": 0, "roots": [root]},
     ).json()
     assert "datasets" in result
@@ -454,7 +453,6 @@ def test_gather_update(simple_ds, manager, broker):
 
 def test_get_dataset(simple_ds, manager, broker):
     """Test to get a dataset from a new manager requesting it from the broker."""
-
     dset_id = simple_ds[0]
     state_id = simple_ds[1]
 
@@ -465,7 +463,6 @@ def test_get_dataset(simple_ds, manager, broker):
 
 def test_get_dataset_failure(manager_low_timeout, broker_low_timeout):
     """Test to get a non existent dataset from a new manager."""
-
     with pytest.raises(BrokerError):
         # what's the chance my wifi password is a valid dataset ID?
         manager_low_timeout.get_dataset(1234567890)
@@ -486,7 +483,6 @@ def test_get_state(simple_ds, manager, broker):
 
 def test_get_state_failure(simple_ds, manager, broker):
     """Test to get a nonexistent state from a new manager."""
-
     test_state = manager.get_state(987654321)
 
     assert test_state is None
@@ -512,14 +508,13 @@ def test_tofrom_dict(simple_ds, manager):
 
 def test_register_start_dataset_automated(manager_and_dataset, broker):
     """Test register_start option register_datasets."""
-
     manager, ds = manager_and_dataset
     start_state = manager.start_state
     config_state = manager.config_state
 
     # test state types
-    assert start_state.state_type == "start_{}".format(__name__)
-    assert config_state.state_type == "config_{}".format(__name__)
+    assert start_state.state_type == f"start_{__name__}"
+    assert config_state.state_type == f"config_{__name__}"
 
     # test returned dataset
     assert start_state.id == ds.state_id
@@ -539,7 +534,6 @@ def test_register_start_dataset_automated(manager_and_dataset, broker):
 
 def test_lru_cache(broker, manager_low_timeout):
     """Test the dataset cache doesn't cache unknown datasets as None."""
-
     ds_id = "doesntexist"
 
     # Request an unknown dataset
